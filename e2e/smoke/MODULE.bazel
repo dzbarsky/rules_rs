@@ -1,7 +1,14 @@
-bazel_dep(name = "com_myorg_rules_mylang", version = "0.0.0", dev_dependency = True)
+bazel_dep(name = "rules_rs", version = "0.0.0", dev_dependency = True)
 bazel_dep(name = "bazel_skylib", version = "1.7.1", dev_dependency = True)
 
 local_path_override(
-    module_name = "com_myorg_rules_mylang",
+    module_name = "rules_rs",
     path = "../..",
 )
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    cargo_toml = "//:Cargo.toml",
+    cargo_lock = "//:Cargo.lock",
+)
+use_repo(crate, "crate")

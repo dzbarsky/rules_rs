@@ -28,7 +28,7 @@ Run `bazel run //:gazelle` to keep them up-to-date.
 ## Using this as a development dependency of other rules
 
 You'll commonly find that you develop in another WORKSPACE, such as
-some other ruleset that depends on rules_mylang, or in a nested
+some other ruleset that depends on rules_rs, or in a nested
 WORKSPACE in the integration_tests folder.
 
 To always tell Bazel to use this directory rather than some release
@@ -36,11 +36,11 @@ artifact or a version fetched from the internet, run this from this
 directory:
 
 ```sh
-OVERRIDE="--override_repository=rules_mylang=$(pwd)/rules_mylang"
+OVERRIDE="--override_repository=rules_rs=$(pwd)/rules_rs"
 echo "common $OVERRIDE" >> ~/.bazelrc
 ```
 
-This means that any usage of `@rules_mylang` on your system will point to this folder.
+This means that any usage of `@rules_rs` on your system will point to this folder.
 
 ## Releasing
 
@@ -51,7 +51,7 @@ If you do nothing, eventually the newest commits will be released automatically 
 This automation is defined in .github/workflows/tag.yaml.
 
 Rather than wait for the cron event, you can trigger manually. Navigate to
-https://github.com/myorg/rules_mylang/actions/workflows/tag.yaml
+https://github.com/dzbarsky/rules_rs/actions/workflows/tag.yaml
 and press the "Run workflow" button.
 
 If you need control over the next release version, for example when making a release candidate for a new major,

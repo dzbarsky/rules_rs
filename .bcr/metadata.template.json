@@ -1,7 +1,7 @@
 {
-  "homepage": "https://github.com/myorg/rules_mylang",
+  "homepage": "https://github.com/dzbarsky/rules_rs",
   "maintainers": [],
-  "repository": ["github:myorg/rules_mylang"],
+  "repository": ["github:dzbarsky/rules_rs"],
   "versions": [],
   "yanked_versions": {}
 }

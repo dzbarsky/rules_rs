@@ -11,4 +11,4 @@ examples export-ignore
 
 # Occasionally there's a need to "stamp" the release version into a file
 # See https://blog.aspect.build/releasing-bazel-rulesets-rust for details if you need this.
-# mylang/version.bzl export-subst
+# rs/version.bzl export-subst

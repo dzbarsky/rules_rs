@@ -9,11 +9,11 @@ Workaround for https://github.com/bazelbuild/bazel/issues/14009
 
 # Forward all the providers
 def _resolved_toolchain_impl(ctx):
-    toolchain_info = ctx.toolchains["//mylang:toolchain_type"]
+    toolchain_info = ctx.toolchains["//rs:toolchain_type"]
     return [
         toolchain_info,
         toolchain_info.default,
-        toolchain_info.mylanginfo,
+        toolchain_info.rsinfo,
         toolchain_info.template_variables,
     ]
 
@@ -21,6 +21,6 @@ def _resolved_toolchain_impl(ctx):
 # https://cs.opensource.google/bazel/bazel/+/master:tools/jdk/java_toolchain_alias.bzl
 resolved_toolchain = rule(
     implementation = _resolved_toolchain_impl,
-    toolchains = ["//mylang:toolchain_type"],
+    toolchains = ["//rs:toolchain_type"],
     doc = DOC,
 )
