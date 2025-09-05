@@ -8,7 +8,7 @@ local_path_override(
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.from_cargo(
-    cargo_toml = "//:Cargo.toml",
     cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
 )
-use_repo(crate, "crate")
+use_repo(crate, "crates")

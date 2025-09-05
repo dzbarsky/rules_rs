@@ -59,12 +59,14 @@ def _sanitize_crate(name):
 
 def _generate_hub_and_spokes(
         mctx,
+        hub_name,
         data,
         ):
     """Generates repositories for the transitive closure of crates defined by manifests and packages.
 
     Args:
         mctx (module_ctx): The module context object.
+        hub_name (string): name
         data (object): Cargo.lock in json format
     """
 
@@ -108,9 +110,6 @@ def _generate_hub_and_spokes(
             block = False)
         download_tokens.append(token)
         #print(name, version, source) #package.get("dependencies"))
-
-    #for k, v in versions_by_name.items():
-    #    print(k, v)
 
     mctx.report_progress("Downloading metadata")
     for token in download_tokens:
@@ -179,7 +178,7 @@ def _generate_hub_and_spokes(
                 osx_deps.append(bazel_target)
 
         _crate_repository(
-            name = _sanitize_crate("{}_{}".format(name, version)),
+            name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
             version = version,
             checksum = checksum,
@@ -189,6 +188,39 @@ def _generate_hub_and_spokes(
             osx_deps = osx_deps,
         )
         print(name, deps, windows_deps, linux_deps, osx_deps)
+
+    hub_contents = []
+    for name, versions in versions_by_name.items():
+        for version in versions:
+            qualified_name = _sanitize_crate("{}_{}").format(name, version)
+            spoke_name = "@{}__{}".format(hub_name, qualified_name)
+            hub_contents.append("""
+alias(
+    name = "{}",
+    actual = "{}",
+    visibility = ["//visibility:public"],
+)""".format(
+        qualified_name, spoke_name,
+    ))
+
+        if len(versions) == 1:
+            hub_contents.append("""
+alias(
+    name = "{}",
+    actual = ":{}",
+    visibility = ["//visibility:public"],
+)""".format(
+        name, qualified_name,
+    ))
+
+    print("\n".join(hub_contents))
+
+    _hub_repo(
+        name = hub_name,
+        contents = {
+            "BUILD.bazel": "\n".join(hub_contents),
+        },
+    )
 
     # contents = json.decode(module_ctx.read(lockfile))
 
@@ -271,11 +303,11 @@ print(json.dumps(data, indent=2))
                 fail(result.stdout + "\n" + result.stderr)
 
             data = json.decode(result.stdout)
-            _generate_hub_and_spokes(mctx, data)
+            _generate_hub_and_spokes(mctx, cfg.name, data)
 
     return mctx.extension_metadata(
-        #root_module_direct_deps = direct_deps,
-        #root_module_direct_dev_deps = [],
+        root_module_direct_deps = direct_deps,
+        root_module_direct_dev_deps = [],
         reproducible = True,
     )
 
@@ -451,7 +483,7 @@ def _crate_repository_impl(rctx):
     url = "https://crates.io/api/v1/crates/{}/{}/download".format(crate, version)
     rctx.download_and_extract(
         url,
-        type = "zip",
+        type = "tar.gz",
         canonical_id = get_default_canonical_id(rctx, urls = [url]),
         sha256 = checksum,
     )
@@ -463,11 +495,13 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "all_files",
     srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
 )
 
 my_library(
     name = "%s",
     deps = [%s],
+    visibility = ["//visibility:public"],
 )
 """ % (
         crate,
@@ -486,5 +520,22 @@ _crate_repository = repository_rule(
         "windows_deps": attr.string_list(default = []),
         "linux_deps": attr.string_list(default = []),
         "osx_deps": attr.string_list(default = []),
+    },
+)
+
+def _hub_repo_impl(rctx):
+    for path, contents in rctx.attr.contents.items():
+        rctx.file(path, contents)
+    rctx.file("WORKSPACE.bazel", """workspace(name = "{}")""".format(
+        rctx.name,
+    ))
+
+_hub_repo = repository_rule(
+    implementation = _hub_repo_impl,
+    attrs = {
+        "contents": attr.string_dict(
+            doc = "A mapping of file names to text they should contain.",
+            mandatory = True,
+        ),
     },
 )
