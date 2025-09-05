@@ -3,6 +3,38 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 def _sanitize_crate(name):
     return name.replace("+", "_")
 
+def _select():
+    crate_features = [
+        "byteorder",
+        "default",
+        "linux-keyutils",
+        "linux-secret-service",
+        "linux-secret-service-rt-async-io-crypto-rust",
+        "platform-all",
+        "platform-freebsd",
+        "platform-ios",
+        "platform-linux",
+        "platform-macos",
+        "platform-openbsd",
+        "platform-windows",
+        "security-framework",
+        "windows-sys",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": [
+            "secret-service",  # aarch64-unknown-linux-gnu
+        ],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [
+            "secret-service",  # x86_64-unknown-linux-gnu
+        ],
+        "@rules_rust//rust/platform:x86_64-unknown-nixos-gnu": [
+            "secret-service",  # x86_64-unknown-linux-gnu, x86_64-unknown-nixos-gnu
+        ],
+        "//conditions:default": [],
+    })
+
+    print(repr(crate_features))
+
+  
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -123,13 +155,16 @@ def _generate_hub_and_spokes(
             elif target == 'cfg(target_os = "macos")':
                 osx_deps.append(bazel_target)
 
+        if name == "keyring":
+            print(data["features"])
+
         _crate_repository(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
             version = version,
             checksum = checksum,
             # TODO(zbarsky): Do real feature unification
-            crate_features = data["features"].get("default", []),
+            crate_features = repr(data["features"].get("default", [])),
             deps = sorted(deps),
             windows_deps = sorted(windows_deps),
             linux_deps = sorted(linux_deps),
@@ -166,6 +201,8 @@ alias(
             "BUILD.bazel": "\n".join(hub_contents),
         },
     )
+
+    _select()
 
 def _crate_impl(mctx):
     mctx.file("convert.py", """
@@ -424,9 +461,7 @@ rust_library(
         {deps}
     ],
     compile_data = {compile_data},
-    crate_features = [
-        {crate_features}
-    ],
+    crate_features = {crate_features},
     crate_root = "src/lib.rs",
     edition = "2021",
     rustc_env_files = [
@@ -449,9 +484,7 @@ rust_library(
 cargo_build_script(
     name = "_bs",
     compile_data = {compile_data},
-    crate_features = [
-        {crate_features}
-    ],
+    crate_features = {crate_features},
     crate_name = "build_script_build",
     crate_root = "build.rs",
     data = {compile_data},
@@ -477,7 +510,7 @@ cargo_build_script(
     rctx.file("BUILD.bazel", build_content.format(
         crate = repr(crate),
         version = repr(version),
-        crate_features = ",\n        ".join(['"%s"' % f for f in rctx.attr.crate_features]),
+        crate_features = rctx.attr.crate_features,
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         compile_data = compile_data,
@@ -489,7 +522,7 @@ _crate_repository = repository_rule(
         "crate": attr.string(mandatory = True),
         "version": attr.string(mandatory = True),
         "checksum": attr.string(mandatory = True),
-        "crate_features": attr.string_list(mandatory = True),
+        "crate_features": attr.string(mandatory = True),
         "deps": attr.string_list(default = []),
         "windows_deps": attr.string_list(default = []),
         "linux_deps": attr.string_list(default = []),

@@ -1,12 +1,60 @@
-"""Provides a simple way to test your rules as an external workspace.
-Add a basic smoke-test target below.
-"""
-
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(":musl_utils.bzl", "platform_transition_binary")
+
+rust_binary(
+    name = "hello",
+    srcs = ["src/main.rs"],
+    tags = ["manual"],
+)
+
+platform_transition_binary(
+    name = "hello_linux_x86_64_musl",
+    binary = ":hello",
+    platform = "//platforms:linux_x86_64_musl",
+)
+
+sh_test(
+    name = "hello_linux_x86_64_musl_test",
+    srcs = ["hello_linux_musl_test.sh"],
+    args = [
+        "$(rootpath :hello_linux_x86_64_musl)",
+        "'ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked'",
+    ],
+    data = [":hello_linux_x86_64_musl"],
+)
+
+platform_transition_binary(
+    name = "hello_linux_arm64_musl",
+    binary = ":hello",
+    platform = "//platforms:linux_arm64_musl",
+)
+
+sh_test(
+    name = "hello_linux_arm64_musl_test",
+    srcs = ["hello_linux_musl_test.sh"],
+    args = [
+        "$(rootpath :hello_linux_arm64_musl)",
+        "'ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked'",
+    ],
+    data = [":hello_linux_arm64_musl"],
+)
+
+rust_binary(
+    name = "keyring",
+    srcs = ["src/keyring.rs"],
+    tags = ["manual"],
+    deps = ["@crates//:keyring"],
+)
+
+platform_transition_binary(
+    name = "keyring_linux_x86_64_musl",
+    binary = ":keyring",
+    platform = "//platforms:linux_x86_64_musl",
+)
 
 build_test(
-    name = "smoke_test",
-    targets = [
-        "@crates//:zvariant_utils",
-    ],
+    name = "keyring_linux_x86_64_musl_build_test",
+    targets = [":keyring_linux_x86_64_musl"],
 )
