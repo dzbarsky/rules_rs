@@ -104,7 +104,7 @@ def _generate_hub_and_spokes(
 
             dep_name = dep["crate_id"]
             if dep_name not in resolved_versions:
-                print("NOT FOUND", dep)
+                # print("NOT FOUND", dep)
                 continue
 
             bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_versions[dep_name]))
@@ -128,12 +128,13 @@ def _generate_hub_and_spokes(
             crate = name,
             version = version,
             checksum = checksum,
-            deps = deps,
-            windows_deps = windows_deps,
-            linux_deps = linux_deps,
-            osx_deps = osx_deps,
+            # TODO(zbarsky): Do real feature unification
+            crate_features = data["features"].get("default", []),
+            deps = sorted(deps),
+            windows_deps = sorted(windows_deps),
+            linux_deps = sorted(linux_deps),
+            osx_deps = sorted(osx_deps),
         )
-        print(name, deps, windows_deps, linux_deps, osx_deps)
 
     hub_contents = []
     for name, versions in versions_by_name.items():
@@ -158,8 +159,6 @@ alias(
 )""".format(
         name, qualified_name,
     ))
-
-    print("\n".join(hub_contents))
 
     _hub_repo(
         name = hub_name,
@@ -425,6 +424,9 @@ rust_library(
         {deps}
     ],
     compile_data = {compile_data},
+    crate_features = [
+        {crate_features}
+    ],
     crate_root = "src/lib.rs",
     edition = "2021",
     rustc_env_files = [
@@ -447,6 +449,9 @@ rust_library(
 cargo_build_script(
     name = "_bs",
     compile_data = {compile_data},
+    crate_features = [
+        {crate_features}
+    ],
     crate_name = "build_script_build",
     crate_root = "build.rs",
     data = {compile_data},
@@ -472,6 +477,7 @@ cargo_build_script(
     rctx.file("BUILD.bazel", build_content.format(
         crate = repr(crate),
         version = repr(version),
+        crate_features = ",\n        ".join(['"%s"' % f for f in rctx.attr.crate_features]),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         compile_data = compile_data,
@@ -483,6 +489,7 @@ _crate_repository = repository_rule(
         "crate": attr.string(mandatory = True),
         "version": attr.string(mandatory = True),
         "checksum": attr.string(mandatory = True),
+        "crate_features": attr.string_list(mandatory = True),
         "deps": attr.string_list(default = []),
         "windows_deps": attr.string_list(default = []),
         "linux_deps": attr.string_list(default = []),
