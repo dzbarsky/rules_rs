@@ -43,7 +43,13 @@ def _select(windows = [], linux = [], osx = []):
         ",\n        ".join(['"%s": %s' % (condition, repr(data)) for (condition, data) in branches])
     )
 
-  
+def _add_to_dict(d, k, v):
+    existing = d.get(k, [])
+    if not existing:
+        d[k] = existing
+    existing.extend(v)
+
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -72,11 +78,8 @@ def _generate_hub_and_spokes(
         name = package["name"]
         version = package["version"]
         
-        versions = versions_by_name.get(name, [])
-        if not versions:
-            versions_by_name[name] = versions
-        versions.append(version)
-        
+        _add_to_dict(versions_by_name, name, [version])
+
         # TODO(zbarsky): Persist these in lockfile facts?
         url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
         file = "{}_{}.json".format(name, version)
@@ -104,10 +107,13 @@ def _generate_hub_and_spokes(
         if not result.success:
             fail("Could not download")
 
-    # TODO(zbarsky): Compute features
-    mctx.report_progress("Computing features")
-    
-    mctx.report_progress("Initializing hub and spokes")
+    # TODO(zbarsky): Do real feature computation, this is pretty hacky
+    features_by_resolved_version = dict()
+    default_features_by_resolved_version = dict()
+    enable_default_features_by_resolved_version = dict()
+
+    mctx.report_progress("Computing dependencies and features")
+    external_repo_kwargs = []
     for package in packages:
         source = package.get("source")
         if not source:
@@ -147,7 +153,8 @@ def _generate_hub_and_spokes(
                 # print("NOT FOUND", dep)
                 continue
 
-            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_versions[dep_name]))
+            resolved_version = resolved_versions[dep_name]
+            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
 
             kind = dep["kind"]
             if kind == "dev":
@@ -168,6 +175,16 @@ def _generate_hub_and_spokes(
                     proc_macro_deps.append(bazel_target)
                 else:
                     deps.append(bazel_target)
+
+                    if dep_name == "hashbrown":
+                        print(name, dep)
+                    # TODO(zbarsky): per-platform features?
+                    features = dep["features"]
+                    if features:
+                        _add_to_dict(features_by_resolved_version, dep_name + "_" + resolved_version, features)
+                    if dep["default_features"]:
+                        enable_default_features_by_resolved_version[dep_name + "_" + resolved_version] = True
+
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.append(bazel_target)
             elif target == "cfg(unix)" or target == 'cfg(not(windows))':
@@ -178,24 +195,39 @@ def _generate_hub_and_spokes(
             elif target == 'cfg(target_os = "macos")':
                 osx_deps.append(bazel_target)
 
+        default_features_by_resolved_version[name + "_" + version] = data["features"].get("default", [])
+
         conditional_deps = _select(
             windows = windows_deps,
             linux = linux_deps,
             osx = osx_deps,
         )
 
-        _crate_repository(
+        kwargs = dict(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
             version = version,
             checksum = checksum,
             edition = data["edition"] or "2015",
-            # TODO(zbarsky): Do real feature unification
-            crate_features = repr(data["features"].get("default", [])),
             build_deps = build_deps,
             proc_macro_deps = proc_macro_deps,
             deps = deps,
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
+        )
+        external_repo_kwargs.append(kwargs)
+
+    mctx.report_progress("Initializing hub and spokes")
+    for kwargs in external_repo_kwargs:
+        # TODO(zbarsky): Do real feature unification, this is hacky
+        resolved_version = kwargs["crate"] + "_" + kwargs["version"]
+        crate_features = features_by_resolved_version.get(resolved_version, [])
+
+        if enable_default_features_by_resolved_version.get(resolved_version):
+            crate_features.extend(default_features_by_resolved_version[resolved_version])
+
+        _crate_repository(
+            crate_features = repr(sorted(list(set(crate_features)))),
+            **kwargs,
         )
 
     hub_contents = []
