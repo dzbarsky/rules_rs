@@ -499,6 +499,13 @@ def _crate_repository_impl(rctx):
 
     cargo_toml_data = rctx.read("Cargo.toml")
 
+    build_script = None
+    if rctx.path("build.rs").exists:
+        build_script = "build.rs"
+    elif 'build = "' in cargo_toml_data:
+        pre = cargo_toml_data[cargo_toml_data.find('build = "') + len('build = "'):]
+        build_script = pre[:pre.find('"')]
+
     is_proc_macro = "proc-macro = true" in cargo_toml_data
 
     # Create a BUILD file with a deps attribute
@@ -563,7 +570,7 @@ cargo_toml_env_vars(
 )
 """
 
-    if rctx.path("build.rs").exists:
+    if build_script:
         deps = [":_bs"] + deps
         build_content += """
 
@@ -572,7 +579,7 @@ cargo_build_script(
     compile_data = {compile_data},
     crate_features = {crate_features},
     crate_name = "build_script_build",
-    crate_root = "build.rs",
+    crate_root = {build_script},
     data = {compile_data},
     deps = [
         {build_deps}
@@ -607,6 +614,7 @@ cargo_build_script(
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         conditional_deps = rctx.attr.conditional_deps,
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
+        build_script = repr(build_script),
         compile_data = compile_data,
     ))
 
