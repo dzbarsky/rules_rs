@@ -3,36 +3,32 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 def _sanitize_crate(name):
     return name.replace("+", "_")
 
-def _select():
-    crate_features = [
-        "byteorder",
-        "default",
-        "linux-keyutils",
-        "linux-secret-service",
-        "linux-secret-service-rt-async-io-crypto-rust",
-        "platform-all",
-        "platform-freebsd",
-        "platform-ios",
-        "platform-linux",
-        "platform-macos",
-        "platform-openbsd",
-        "platform-windows",
-        "security-framework",
-        "windows-sys",
-    ] + select({
-        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": [
-            "secret-service",  # aarch64-unknown-linux-gnu
-        ],
-        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [
-            "secret-service",  # x86_64-unknown-linux-gnu
-        ],
-        "@rules_rust//rust/platform:x86_64-unknown-nixos-gnu": [
-            "secret-service",  # x86_64-unknown-linux-gnu, x86_64-unknown-nixos-gnu
-        ],
-        "//conditions:default": [],
-    })
+def _select(windows = [], linux = [], osx = []):
+    branches = []
 
-    print(repr(crate_features))
+    if windows:
+        branches.append(("@platforms//os:windows", windows))
+
+    if linux:
+        branches.append(("@platforms//os:linux", linux))
+
+    if osx:
+        branches.append(("@platforms//os:osx", osx))
+
+    if not branches:
+        return ""
+
+    branches.append(("//conditions:default", []))
+
+
+    value = """select({
+        %s
+    })""" % (
+        ",\n        ".join(['"%s": %s' % (condition, repr(data)) for (condition, data) in branches])
+    )
+
+    print(value)
+    return value
 
   
 def _generate_hub_and_spokes(
@@ -143,7 +139,7 @@ def _generate_hub_and_spokes(
 
             # TODO(zbarsky): Real parser?
             target = dep["target"]
-            if not target or target == "cfg(any())":
+            if not target:
                 deps.append(bazel_target)
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.append(bazel_target)
@@ -155,8 +151,11 @@ def _generate_hub_and_spokes(
             elif target == 'cfg(target_os = "macos")':
                 osx_deps.append(bazel_target)
 
-        if name == "keyring":
-            print(data["features"])
+        conditional_deps = _select(
+            windows = windows_deps,
+            linux = linux_deps,
+            osx = osx_deps,
+        )
 
         _crate_repository(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
@@ -165,10 +164,8 @@ def _generate_hub_and_spokes(
             checksum = checksum,
             # TODO(zbarsky): Do real feature unification
             crate_features = repr(data["features"].get("default", [])),
-            deps = sorted(deps),
-            windows_deps = sorted(windows_deps),
-            linux_deps = sorted(linux_deps),
-            osx_deps = sorted(osx_deps),
+            deps = deps,
+            conditional_deps = " + " + conditional_deps if conditional_deps else "",
         )
 
     hub_contents = []
@@ -201,8 +198,6 @@ alias(
             "BUILD.bazel": "\n".join(hub_contents),
         },
     )
-
-    _select()
 
 def _crate_impl(mctx):
     mctx.file("convert.py", """
@@ -459,7 +454,7 @@ rust_library(
     ),
     deps = [
         {deps}
-    ],
+    ]{conditional_deps},
     compile_data = {compile_data},
     crate_features = {crate_features},
     crate_root = "src/lib.rs",
@@ -512,6 +507,7 @@ cargo_build_script(
         version = repr(version),
         crate_features = rctx.attr.crate_features,
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
+        conditional_deps = rctx.attr.conditional_deps,
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         compile_data = compile_data,
     ))
@@ -524,9 +520,7 @@ _crate_repository = repository_rule(
         "checksum": attr.string(mandatory = True),
         "crate_features": attr.string(mandatory = True),
         "deps": attr.string_list(default = []),
-        "windows_deps": attr.string_list(default = []),
-        "linux_deps": attr.string_list(default = []),
-        "osx_deps": attr.string_list(default = []),
+        "conditional_deps": attr.string(default = ""),
     },
 )
 
