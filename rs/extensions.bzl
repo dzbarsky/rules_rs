@@ -49,6 +49,8 @@ def _add_to_dict(d, k, v):
         d[k] = existing
     existing.extend(v)
 
+def _fq_crate(name, version):
+    return _sanitize_crate(name + "_" + version)
 
 def _generate_hub_and_spokes(
         mctx,
@@ -108,9 +110,10 @@ def _generate_hub_and_spokes(
             fail("Could not download")
 
     # TODO(zbarsky): Do real feature computation, this is pretty hacky
-    features_by_resolved_version = dict()
-    default_features_by_resolved_version = dict()
-    enable_default_features_by_resolved_version = dict()
+    enabled_features_by_fq_crate = dict()
+    possible_features_by_fq_crate = dict()
+    enable_default_features_by_fq_crate = dict()
+    resolved_versions_by_fq_crate = dict()
 
     mctx.report_progress("Computing dependencies and features")
     external_repo_kwargs = []
@@ -133,9 +136,11 @@ def _generate_hub_and_spokes(
                 dep, resolved_version = dep.split(" ")
             resolved_versions[dep] = resolved_version
 
+        fq_crate = _fq_crate(name, version)
+        resolved_versions_by_fq_crate[fq_crate] = resolved_versions
+
         file = "{}_{}.json".format(name, version)
         data = json.decode(mctx.read(file))["version"]
-        #print(data)
 
         dependencies = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
         
@@ -176,14 +181,12 @@ def _generate_hub_and_spokes(
                 else:
                     deps.append(bazel_target)
 
-                    if dep_name == "hashbrown":
-                        print(name, dep)
                     # TODO(zbarsky): per-platform features?
                     features = dep["features"]
                     if features:
-                        _add_to_dict(features_by_resolved_version, dep_name + "_" + resolved_version, features)
+                        _add_to_dict(enabled_features_by_fq_crate, _fq_crate(dep_name, resolved_version), features)
                     if dep["default_features"]:
-                        enable_default_features_by_resolved_version[dep_name + "_" + resolved_version] = True
+                        enable_default_features_by_fq_crate[_fq_crate(dep_name, resolved_version)] = True
 
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.append(bazel_target)
@@ -195,7 +198,7 @@ def _generate_hub_and_spokes(
             elif target == 'cfg(target_os = "macos")':
                 osx_deps.append(bazel_target)
 
-        default_features_by_resolved_version[name + "_" + version] = data["features"].get("default", [])
+        possible_features_by_fq_crate[fq_crate] = data["features"]
 
         conditional_deps = _select(
             windows = windows_deps,
@@ -216,14 +219,47 @@ def _generate_hub_and_spokes(
         )
         external_repo_kwargs.append(kwargs)
 
+    # TODO(zbarsky): Do real feature unification
+    mctx.report_progress("Running rounds of hacky feature unification")
+    for _ in range(3):
+        for package in packages:
+            source = package.get("source")
+            if not source:
+                # Not from crates.io
+                continue
+
+            name = package["name"]
+            version = package["version"]
+
+            fq_crate = _fq_crate(name, version)
+            crate_features = enabled_features_by_fq_crate.get(fq_crate, [])
+            if not crate_features:
+                enabled_features_by_fq_crate[fq_crate] = crate_features
+
+            possible_features = possible_features_by_fq_crate[fq_crate]
+
+            for crate_feature in list(crate_features):
+                crate_features.extend(possible_features.get(crate_feature, []))
+
+            if enable_default_features_by_fq_crate.get(fq_crate):
+                crate_features.extend(possible_features.get("default", []))
+
+            for feature in crate_features:
+                # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
+                unlocked_features = possible_features.get(feature, [])
+                for unlock in unlocked_features:
+                    if "/" in unlock:
+                        dep_name, dep_feature = unlock.split("/")
+                        if dep_name.endswith("?"):
+                            print("Skipping", unlock, "it's optional")
+                            continue
+                        dep_version = resolved_versions_by_fq_crate[fq_crate][dep_name]
+                        _add_to_dict(enabled_features_by_fq_crate, _fq_crate(dep_name, dep_version), [dep_feature])
+
     mctx.report_progress("Initializing hub and spokes")
     for kwargs in external_repo_kwargs:
-        # TODO(zbarsky): Do real feature unification, this is hacky
-        resolved_version = kwargs["crate"] + "_" + kwargs["version"]
-        crate_features = features_by_resolved_version.get(resolved_version, [])
-
-        if enable_default_features_by_resolved_version.get(resolved_version):
-            crate_features.extend(default_features_by_resolved_version[resolved_version])
+        resolved_version = _fq_crate(kwargs["crate"], kwargs["version"])
+        crate_features = enabled_features_by_fq_crate.get(resolved_version, [])
 
         _crate_repository(
             crate_features = repr(sorted(list(set(crate_features)))),
@@ -233,7 +269,7 @@ def _generate_hub_and_spokes(
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
-            qualified_name = _sanitize_crate("{}_{}").format(name, version)
+            qualified_name = _fq_crate(name, version)
             spoke_name = "@{}__{}//:{}".format(hub_name, qualified_name, name)
             hub_contents.append("""
 alias(
