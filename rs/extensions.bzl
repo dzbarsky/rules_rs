@@ -1,58 +1,4 @@
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
-
-# A list of labels which may be relative (and if so, is within the repo the rule is generated in).
-#
-# If I were to write ":foo", with attr.label_list, it would evaluate to
-# "@@//:foo". However, for a tag such as deps, ":foo" should refer to
-# "@@rules_rust~crates~<crate>//:foo".
-_relative_label_list = attr.string_list
-
-_OPT_BOOL_VALUES = {
-    "auto": None,
-    "off": False,
-    "on": True,
-}
-
-def _get_or_insert(d, key, value):
-    if key not in d:
-        d[key] = value
-    return d[key]
-
-def _generate_repo_impl(repository_ctx):
-    for path, contents in repository_ctx.attr.contents.items():
-        repository_ctx.file(path, contents)
-    repository_ctx.file("WORKSPACE.bazel", """workspace(name = "{}")""".format(
-        repository_ctx.name,
-    ))
-
-_generate_repo = repository_rule(
-    doc = "A utility for generating a hub repo.",
-    implementation = _generate_repo_impl,
-    attrs = {
-        "contents": attr.string_dict(
-            doc = "A mapping of file names to text they should contain.",
-            mandatory = True,
-        ),
-    },
-)
-
-def _annotations_for_repo(module_annotations, repo_specific_annotations):
-    """Merges the set of global annotations with the repo-specific ones
-
-    Args:
-        module_annotations (dict): The annotation tags that apply to all repos, keyed by crate.
-        repo_specific_annotations (dict): The annotation tags that apply to only this repo, keyed by crate.
-    """
-
-    if not repo_specific_annotations:
-        return module_annotations
-
-    annotations = dict(module_annotations)
-    for crate, values in repo_specific_annotations.items():
-        _get_or_insert(annotations, crate, []).extend(values)
-    return annotations
 
 def _sanitize_crate(name):
     return name.replace("+", "_")
@@ -62,7 +8,7 @@ def _generate_hub_and_spokes(
         hub_name,
         data,
         ):
-    """Generates repositories for the transitive closure of crates defined by manifests and packages.
+    """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
         mctx (module_ctx): The module context object.
@@ -221,63 +167,6 @@ alias(
             "BUILD.bazel": "\n".join(hub_contents),
         },
     )
-
-    # contents = json.decode(module_ctx.read(lockfile))
-
-    # for crate in contents["crates"].values():
-    #     repo = crate["repository"]
-    #     if repo == None:
-    #         continue
-    #     name = crate["name"]
-    #     version = crate["version"]
-
-    #     # "+" isn't valid in a repo name.
-    #     crate_repo_name = "{repo_name}__{name}-{version}".format(
-    #         repo_name = cfg.name,
-    #         name = name,
-    #         version = version.replace("+", "-"),
-    #     )
-
-    #     if "Http" in repo:
-    #         # Replicates functionality in repo_http.j2.
-    #         build_file_content = ""
-    #         repo = repo["Http"]
-    #         http_archive(
-    #             name = crate_repo_name,
-    #             patch_args = repo.get("patch_args", None),
-    #             patch_tool = repo.get("patch_tool", None),
-    #             patches = repo.get("patches", None),
-    #             remote_patch_strip = 1,
-    #             sha256 = repo.get("sha256", None),
-    #             type = "tar.gz",
-    #             urls = [repo["url"]],
-    #             strip_prefix = "%s-%s" % (crate["name"], crate["version"]),
-    #             build_file_content = build_file_content,
-    #         )
-    #     elif "Git" in repo:
-    #         # Replicates functionality in repo_git.j2
-    #         build_file_content = ""
-    #         repo = repo["Git"]
-    #         kwargs = {}
-    #         for k, v in repo["commitish"].items():
-    #             if k == "Rev":
-    #                 kwargs["commit"] = v
-    #             else:
-    #                 kwargs[k.lower()] = v
-    #         new_git_repository(
-    #             name = crate_repo_name,
-    #             init_submodules = True,
-    #             patch_args = repo.get("patch_args", None),
-    #             patch_tool = repo.get("patch_tool", None),
-    #             patches = repo.get("patches", None),
-    #             shallow_since = repo.get("shallow_since", None),
-    #             remote = repo["remote"],
-    #             build_file_content = build_file_content,
-    #             strip_prefix = repo.get("strip_prefix", None),
-    #             **kwargs
-    #         )
-    #     else:
-    #         fail("Invalid repo: expected Http or Git to exist for crate %s-%s, got %s" % (name, version, repo))
 
 def _crate_impl(mctx):
     mctx.file("convert.py", """
