@@ -21,14 +21,11 @@ def _select(windows = [], linux = [], osx = []):
     branches.append(("//conditions:default", []))
 
 
-    value = """select({
+    return """select({
         %s
     })""" % (
         ",\n        ".join(['"%s": %s' % (condition, repr(data)) for (condition, data) in branches])
     )
-
-    print(value)
-    return value
 
   
 def _generate_hub_and_spokes(
@@ -125,17 +122,25 @@ def _generate_hub_and_spokes(
         linux_deps = []
         osx_deps = []
 
-        for dep in dependencies:
-            # Drop dev deps
-            if dep["kind"] == "dev":
-                continue
+        build_deps = []
 
+        for dep in dependencies:
             dep_name = dep["crate_id"]
             if dep_name not in resolved_versions:
                 # print("NOT FOUND", dep)
                 continue
 
             bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_versions[dep_name]))
+
+            kind = dep["kind"]
+            if kind == "dev":
+            # Drop dev deps
+                continue
+            elif kind == "build":
+                build_deps.append(bazel_target)
+
+            if name == "async-io":
+                print("Async-io", dep)
 
             # TODO(zbarsky): Real parser?
             target = dep["target"]
@@ -162,8 +167,10 @@ def _generate_hub_and_spokes(
             crate = name,
             version = version,
             checksum = checksum,
+            edition = data["edition"] or "2015",
             # TODO(zbarsky): Do real feature unification
             crate_features = repr(data["features"].get("default", [])),
+            build_deps = build_deps,
             deps = deps,
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
         )
@@ -458,7 +465,7 @@ rust_library(
     compile_data = {compile_data},
     crate_features = {crate_features},
     crate_root = "src/lib.rs",
-    edition = "2021",
+    edition = {edition},
     rustc_env_files = [
         ":cargo_toml_env_vars",
     ],
@@ -483,7 +490,10 @@ cargo_build_script(
     crate_name = "build_script_build",
     crate_root = "build.rs",
     data = {compile_data},
-    edition = "2018",
+    deps = [
+        {build_deps}
+    ],
+    edition = {edition},
     pkg_name = {crate},
     rustc_env_files = [
         ":cargo_toml_env_vars",
@@ -505,7 +515,9 @@ cargo_build_script(
     rctx.file("BUILD.bazel", build_content.format(
         crate = repr(crate),
         version = repr(version),
+        edition = repr(rctx.attr.edition),
         crate_features = rctx.attr.crate_features,
+        build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         conditional_deps = rctx.attr.conditional_deps,
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
@@ -518,7 +530,9 @@ _crate_repository = repository_rule(
         "crate": attr.string(mandatory = True),
         "version": attr.string(mandatory = True),
         "checksum": attr.string(mandatory = True),
+        "edition": attr.string(mandatory = True),
         "crate_features": attr.string(mandatory = True),
+        "build_deps": attr.string_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
     },
