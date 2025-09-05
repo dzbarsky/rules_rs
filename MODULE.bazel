@@ -4,6 +4,7 @@ module(
     name = "rules_rs",
 )
 
+bazel_dep(name = "rules_rust", version = "0.64.0")
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")

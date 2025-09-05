@@ -107,7 +107,7 @@ def _generate_hub_and_spokes(
                 print("NOT FOUND", dep)
                 continue
 
-            bazel_target = "//:{}_{}".format(dep_name, resolved_versions[dep_name])
+            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_versions[dep_name]))
 
             # TODO(zbarsky): Real parser?
             target = dep["target"]
@@ -139,7 +139,7 @@ def _generate_hub_and_spokes(
     for name, versions in versions_by_name.items():
         for version in versions:
             qualified_name = _sanitize_crate("{}_{}").format(name, version)
-            spoke_name = "@{}__{}".format(hub_name, qualified_name)
+            spoke_name = "@{}__{}//:{}".format(hub_name, qualified_name, name)
             hub_contents.append("""
 alias(
     name = "{}",
@@ -214,6 +214,8 @@ _from_cargo = tag_class(
         "cargo_lock": attr.label(),
     },
 )
+
+_relative_label_list = attr.string
 
 # This should be kept in sync with crate_universe/private/crate.bzl.
 _annotation = tag_class(
@@ -301,11 +303,11 @@ _annotation = tag_class(
         "gen_binaries": attr.string_list(
             doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
         ),
-        "gen_build_script": attr.string(
-            doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",
-            values = _OPT_BOOL_VALUES.keys(),
-            default = "auto",
-        ),
+        #"gen_build_script": attr.string(
+        #    doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",
+        #    values = _OPT_BOOL_VALUES.keys(),
+        #    default = "auto",
+        #),
         "override_target_bin": attr.label(
             doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
         ),
@@ -374,28 +376,64 @@ def _crate_repository_impl(rctx):
         url,
         type = "tar.gz",
         canonical_id = get_default_canonical_id(rctx, urls = [url]),
+        strip_prefix = "{}-{}".format(crate, version),
         sha256 = checksum,
     )
 
     # Create a BUILD file with a deps attribute
     build_content = """
+load("@rules_rust//cargo:defs.bzl", "cargo_toml_env_vars")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "all_files",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"],
+cargo_toml_env_vars(
+    name = "cargo_toml_env_vars",
+    src = "Cargo.toml",
 )
 
-my_library(
-    name = "%s",
-    deps = [%s],
-    visibility = ["//visibility:public"],
+rust_library(
+    name = {crate},
+    srcs = glob(
+        include = ["**/*.rs"],
+        allow_empty = True,
+    ),
+    deps = [
+        {deps}
+    ],
+    compile_data = glob(
+        include = ["**"],
+        allow_empty = True,
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_root = "src/lib.rs",
+    edition = "2021",
+    rustc_env_files = [
+        ":cargo_toml_env_vars",
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    tags = [
+        "crate-name=adler2",
+        "manual",
+        "noclippy",
+        "norustfmt",
+    ],
+    version = {version}
 )
-""" % (
-        crate,
-        ",\n        ".join(['"%s"' % d for d in deps]),
-    )
+""".format(
+    crate = repr(crate),
+    version = repr(version),
+    deps = ",\n        ".join(['"%s"' % d for d in deps]),
+)
 
     rctx.file("BUILD.bazel", build_content)
 
