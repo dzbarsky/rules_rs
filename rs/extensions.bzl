@@ -1,5 +1,21 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 
+# TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
+# We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
+# For now just hardcode it; try to get crates.io fixed to tell us
+_PROC_MACROS = [
+    "async-recursion",
+    "async-trait",
+    "derivative",
+    "enumflags2_derive",
+    "futures-macro",
+    "serde_derive",
+    "serde_repr",
+    "tracing-attributes",
+    "zbus_macros",
+    "zvariant_derive",
+]
+
 def _sanitize_crate(name):
     return name.replace("+", "_")
 
@@ -123,6 +139,7 @@ def _generate_hub_and_spokes(
         osx_deps = []
 
         build_deps = []
+        proc_macro_deps = []
 
         for dep in dependencies:
             dep_name = dep["crate_id"]
@@ -139,13 +156,18 @@ def _generate_hub_and_spokes(
             elif kind == "build":
                 build_deps.append(bazel_target)
 
-            if name == "async-io":
-                print("Async-io", dep)
-
             # TODO(zbarsky): Real parser?
             target = dep["target"]
             if not target:
-                deps.append(bazel_target)
+                proc_macro = False
+                for x in _PROC_MACROS:
+                    if x in dep_name:
+                        proc_macro = True
+                        break
+                if proc_macro:
+                    proc_macro_deps.append(bazel_target)
+                else:
+                    deps.append(bazel_target)
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.append(bazel_target)
             elif target == "cfg(unix)" or target == 'cfg(not(windows))':
@@ -171,6 +193,7 @@ def _generate_hub_and_spokes(
             # TODO(zbarsky): Do real feature unification
             crate_features = repr(data["features"].get("default", [])),
             build_deps = build_deps,
+            proc_macro_deps = proc_macro_deps,
             deps = deps,
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
         )
@@ -420,6 +443,10 @@ def _crate_repository_impl(rctx):
         sha256 = checksum,
     )
 
+    cargo_toml_data = rctx.read("Cargo.toml")
+
+    is_proc_macro = "proc-macro = true" in cargo_toml_data
+
     # Create a BUILD file with a deps attribute
     
     tags = [
@@ -444,7 +471,7 @@ def _crate_repository_impl(rctx):
 
     build_content = """
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script", "cargo_toml_env_vars")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "{library_rule_type}")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -453,7 +480,7 @@ cargo_toml_env_vars(
     src = "Cargo.toml",
 )
 
-rust_library(
+{library_rule_type}(
     name = {crate},
     srcs = glob(
         include = ["**/*.rs"],
@@ -462,6 +489,9 @@ rust_library(
     deps = [
         {deps}
     ]{conditional_deps},
+    proc_macro_deps = [
+        {proc_macro_deps}
+    ],
     compile_data = {compile_data},
     crate_features = {crate_features},
     crate_root = "src/lib.rs",
@@ -513,10 +543,12 @@ cargo_build_script(
 )"""
 
     rctx.file("BUILD.bazel", build_content.format(
+        library_rule_type = "rust_proc_macro" if is_proc_macro else "rust_library",
         crate = repr(crate),
         version = repr(version),
         edition = repr(rctx.attr.edition),
         crate_features = rctx.attr.crate_features,
+        proc_macro_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_deps]),
         build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         conditional_deps = rctx.attr.conditional_deps,
@@ -533,6 +565,7 @@ _crate_repository = repository_rule(
         "edition": attr.string(mandatory = True),
         "crate_features": attr.string(mandatory = True),
         "build_deps": attr.string_list(default = []),
+        "proc_macro_deps": attr.string_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
     },
