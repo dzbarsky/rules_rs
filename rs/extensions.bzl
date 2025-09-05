@@ -65,18 +65,14 @@ def _generate_hub_and_spokes(
         data (object): Cargo.lock in json format
     """
 
-    packages = data["package"]
+    # Only examine deps from crates.io
+    packages = [p for p in data["package"] if p.get("source")]
 
     download_tokens = []
     files = []
 
     versions_by_name = dict()
     for package in packages:
-        source = package.get("source")
-        if not source:
-            # Not from crates.io
-            continue
-
         name = package["name"]
         version = package["version"]
         
@@ -118,11 +114,6 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Computing dependencies and features")
     external_repo_kwargs = []
     for package in packages:
-        source = package.get("source")
-        if not source:
-            # Not from crates.io
-            continue
-
         name = package["name"]
         version = package["version"]
         checksum = package["checksum"]
@@ -223,11 +214,6 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Running rounds of hacky feature unification")
     for _ in range(3):
         for package in packages:
-            source = package.get("source")
-            if not source:
-                # Not from crates.io
-                continue
-
             name = package["name"]
             version = package["version"]
 
