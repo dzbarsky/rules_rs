@@ -187,6 +187,8 @@ print(json.dumps(data, indent=2))
 
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
+            mctx.watch(cfg.cargo_lock)
+            # TODO(zbarsky): This relies on host python 3.11+, we will need a better solution.
             result = mctx.execute(["python", "convert.py", cfg.cargo_lock])
             if result.return_code != 0:
                 fail(result.stdout + "\n" + result.stderr)
@@ -381,8 +383,29 @@ def _crate_repository_impl(rctx):
     )
 
     # Create a BUILD file with a deps attribute
+    
+    tags = [
+        "crate-name=" + crate,
+        "manual",
+        "noclippy",
+        "norustfmt",
+    ]
+
+    compile_data = """glob(
+        include = ["**"],
+        allow_empty = True,
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    )"""
+
     build_content = """
-load("@rules_rust//cargo:defs.bzl", "cargo_toml_env_vars")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script", "cargo_toml_env_vars")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -401,18 +424,7 @@ rust_library(
     deps = [
         {deps}
     ],
-    compile_data = glob(
-        include = ["**"],
-        allow_empty = True,
-        exclude = [
-            "**/* *",
-            ".tmp_git_root/**/*",
-            "BUILD",
-            "BUILD.bazel",
-            "WORKSPACE",
-            "WORKSPACE.bazel",
-        ],
-    ),
+    compile_data = {compile_data},
     crate_root = "src/lib.rs",
     edition = "2021",
     rustc_env_files = [
@@ -422,20 +434,48 @@ rust_library(
         "--cap-lints=allow",
     ],
     tags = [
-        "crate-name=adler2",
-        "manual",
-        "noclippy",
-        "norustfmt",
+        {tags}
     ],
     version = {version}
 )
-""".format(
-    crate = repr(crate),
-    version = repr(version),
-    deps = ",\n        ".join(['"%s"' % d for d in deps]),
-)
+"""
 
-    rctx.file("BUILD.bazel", build_content)
+    if rctx.path("build.rs").exists:
+        deps = [":_bs"] + deps
+        build_content += """
+
+cargo_build_script(
+    name = "_bs",
+    compile_data = {compile_data},
+    crate_name = "build_script_build",
+    crate_root = "build.rs",
+    data = {compile_data},
+    edition = "2018",
+    pkg_name = {crate},
+    rustc_env_files = [
+        ":cargo_toml_env_vars",
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    srcs = glob(
+        allow_empty = True,
+        include = ["**/*.rs"],
+    ),
+    tags = [
+        {tags}
+    ],
+    version = {version},
+    visibility = ["//visibility:private"],
+)"""
+
+    rctx.file("BUILD.bazel", build_content.format(
+        crate = repr(crate),
+        version = repr(version),
+        deps = ",\n        ".join(['"%s"' % d for d in deps]),
+        tags = ",\n        ".join(['"%s"' % t for t in tags]),
+        compile_data = compile_data,
+    ))
 
 _crate_repository = repository_rule(
     implementation = _crate_repository_impl,
