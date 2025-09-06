@@ -90,7 +90,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
     # instead of being careful about change tracking.
     initial_count = _count(feature_resolutions_by_fq_crate)
 
-    for feature_resolutions in feature_resolutions_by_fq_crate.values():
+    for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions["features_enabled"]
 
         deps = feature_resolutions["deps"]
@@ -159,22 +159,20 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
             features_enabled.add("default")
 
         for enabled_feature in list(features_enabled):
+            # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
             for implied_feature in possible_features.get(enabled_feature, []):
                 features_enabled.add(implied_feature.removeprefix("dep:"))
 
         for feature in features_enabled:
-            # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
-            unlocked_features = possible_features.get(feature, [])
-            for unlock in unlocked_features:
-                if "/" in unlock:
-                    dep_name, dep_feature = unlock.split("/")
+            if "/" in feature:
+                dep_name, dep_feature = feature.split("/")
 
-                    # TODO(zbarsky): Is this correct?
-                    if dep_name.endswith("?"):
-                        #print("Skipping", unlock, "it's optional")
-                        continue
-                    dep_version = possible_dep_version_by_name[dep_name]
-                    feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]["features_enabled"].add(dep_feature)
+                # TODO(zbarsky): Is this correct?
+                if dep_name.endswith("?"):
+                    print("Skipping", feature, "for", fq_crate, "it's optional")
+                    continue
+                dep_version = possible_dep_version_by_name[dep_name]
+                feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]["features_enabled"].add(dep_feature)
 
         feature_resolutions["features_enabled"] = set([
             f
@@ -188,17 +186,17 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
-        data):
+        cargo_lock):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
         mctx (module_ctx): The module context object.
         hub_name (string): name
-        data (object): Cargo.lock in json format
+        cargo_lock (object): Cargo.lock in json format
     """
 
     # Only examine deps from crates.io
-    packages = [p for p in data["package"] if p.get("source")]
+    packages = [p for p in cargo_lock["package"] if p.get("source")]
 
     download_tokens = []
     files = []
@@ -237,12 +235,6 @@ def _generate_hub_and_spokes(
         result = token.wait()
         if not result.success:
             fail("Could not download")
-
-    # TODO(zbarsky): Do real feature computation, this is pretty hacky
-    #enabled_features_by_fq_crate = dict()
-    #possible_features_by_fq_crate = dict()
-    #enable_default_features_by_fq_crate = dict()
-    #resolved_versions_by_fq_crate = dict()
 
     mctx.report_progress("Computing dependencies and features")
 
@@ -369,8 +361,8 @@ print(json.dumps(data, indent=2))
             if result.return_code != 0:
                 fail(result.stdout + "\n" + result.stderr)
 
-            data = json.decode(result.stdout)
-            _generate_hub_and_spokes(mctx, cfg.name, data)
+            cargo_lock = json.decode(result.stdout)
+            _generate_hub_and_spokes(mctx, cfg.name, cargo_lock)
 
     return mctx.extension_metadata(
         root_module_direct_deps = direct_deps,
