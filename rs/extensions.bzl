@@ -36,7 +36,6 @@ def _select(windows = [], linux = [], osx = []):
 
     branches.append(("//conditions:default", []))
 
-
     return """select({
         %s
     })""" % (
@@ -52,11 +51,144 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return _sanitize_crate(name + "_" + version)
 
+def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features):
+    return dict(
+        default_features_enabled = False,
+        features_enabled = set(),
+
+        # TODO(zbarsky): Do these also need the platform-specific variants?
+        build_deps = set(),
+        proc_macro_deps = set(),
+        deps = set(),
+        windows_deps = set(),
+        linux_deps = set(),
+        osx_deps = set(),
+
+        # Following data is immutable, it comes from crates.io + Cargo.lock
+        possible_deps = possible_deps,
+        possible_dep_version_by_name = possible_dep_version_by_name,
+        possible_features = possible_features,
+    )
+
+def _count(feature_resolutions_by_fq_crate):
+    n = 0
+    for feature_resolutions in feature_resolutions_by_fq_crate.values():
+        n += int(feature_resolutions["default_features_enabled"])
+        n += len(feature_resolutions["features_enabled"])
+        n += len(feature_resolutions["build_deps"])
+        n += len(feature_resolutions["proc_macro_deps"])
+        n += len(feature_resolutions["deps"])
+        n += len(feature_resolutions["windows_deps"])
+        n += len(feature_resolutions["linux_deps"])
+        n += len(feature_resolutions["osx_deps"])
+
+    print("Got count", n)
+    return n
+
+def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
+    # Resolution process always enables new crates/features so we can just count total enabled
+    # instead of being careful about change tracking.
+    initial_count = _count(feature_resolutions_by_fq_crate)
+
+    for feature_resolutions in feature_resolutions_by_fq_crate.values():
+        features_enabled = feature_resolutions["features_enabled"]
+
+        deps = feature_resolutions["deps"]
+        windows_deps = feature_resolutions["windows_deps"]
+        linux_deps = feature_resolutions["linux_deps"]
+        osx_deps = feature_resolutions["osx_deps"]
+
+        build_deps = feature_resolutions["build_deps"]
+        proc_macro_deps = feature_resolutions["proc_macro_deps"]
+
+        possible_dep_version_by_name = feature_resolutions["possible_dep_version_by_name"]
+        possible_features = feature_resolutions["possible_features"]
+
+        # Propagate features across currently enabled dependencies.
+        for dep in feature_resolutions["possible_deps"]:
+            dep_name = dep["crate_id"]
+            if dep["optional"] and dep_name not in features_enabled:
+                continue
+
+            resolved_version = possible_dep_version_by_name.get(dep_name)
+            if not resolved_version:
+                # print("NOT FOUND", dep)
+                continue
+
+            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
+
+            kind = dep["kind"]
+            if kind == "dev":
+                # Drop dev deps
+                continue
+            elif kind == "build":
+                build_deps.add(bazel_target)
+
+            # TODO(zbarsky): Real parser?
+            target = dep["target"]
+            if not target:
+                proc_macro = False
+                for x in _PROC_MACROS:
+                    if x in dep_name:
+                        proc_macro = True
+                        break
+                if proc_macro:
+                    proc_macro_deps.add(bazel_target)
+                else:
+                    deps.add(bazel_target)
+
+                    # TODO(zbarsky): per-platform features?
+                    dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
+                    for feature in dep.get("features", []):
+                        dep_feature_resolutions["features_enabled"].add(feature)
+                    if dep["default_features"]:
+                        dep_feature_resolutions["default_features_enabled"] = True
+
+            elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
+                windows_deps.add(bazel_target)
+            elif target == "cfg(unix)" or target == "cfg(not(windows))":
+                linux_deps.add(bazel_target)
+                osx_deps.add(bazel_target)
+            elif target == 'cfg(target_os = "linux")':
+                linux_deps.add(bazel_target)
+            elif target == 'cfg(target_os = "macos")':
+                osx_deps.add(bazel_target)
+
+        # Enable any features that are implied by previously-enabled features.
+        if feature_resolutions["default_features_enabled"]:
+            features_enabled.add("default")
+
+        for enabled_feature in list(features_enabled):
+            for implied_feature in possible_features.get(enabled_feature, []):
+                features_enabled.add(implied_feature.removeprefix("dep:"))
+
+        for feature in features_enabled:
+            # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
+            unlocked_features = possible_features.get(feature, [])
+            for unlock in unlocked_features:
+                if "/" in unlock:
+                    dep_name, dep_feature = unlock.split("/")
+
+                    # TODO(zbarsky): Is this correct?
+                    if dep_name.endswith("?"):
+                        #print("Skipping", unlock, "it's optional")
+                        continue
+                    dep_version = possible_dep_version_by_name[dep_name]
+                    feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]["features_enabled"].add(dep_feature)
+
+        feature_resolutions["features_enabled"] = set([
+            f
+            for f in features_enabled
+            if "/" not in f
+        ])
+
+    final_count = _count(feature_resolutions_by_fq_crate)
+    return final_count > initial_count
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
-        data,
-        ):
+        data):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
@@ -75,7 +207,7 @@ def _generate_hub_and_spokes(
     for package in packages:
         name = package["name"]
         version = package["version"]
-        
+
         _add_to_dict(versions_by_name, name, [version])
 
         # TODO(zbarsky): Persist these in lockfile facts?
@@ -85,7 +217,8 @@ def _generate_hub_and_spokes(
             url,
             file,
             canonical_id = get_default_canonical_id(mctx, urls = [url]),
-            block = False)
+            block = False,
+        )
         download_tokens.append(token)
         files.append(file)
 
@@ -95,9 +228,9 @@ def _generate_hub_and_spokes(
             url,
             file,
             canonical_id = get_default_canonical_id(mctx, urls = [url]),
-            block = False)
+            block = False,
+        )
         download_tokens.append(token)
-        #print(name, version, source) #package.get("dependencies"))
 
     mctx.report_progress("Downloading metadata")
     for token in download_tokens:
@@ -106,151 +239,76 @@ def _generate_hub_and_spokes(
             fail("Could not download")
 
     # TODO(zbarsky): Do real feature computation, this is pretty hacky
-    enabled_features_by_fq_crate = dict()
-    possible_features_by_fq_crate = dict()
-    enable_default_features_by_fq_crate = dict()
-    resolved_versions_by_fq_crate = dict()
+    #enabled_features_by_fq_crate = dict()
+    #possible_features_by_fq_crate = dict()
+    #enable_default_features_by_fq_crate = dict()
+    #resolved_versions_by_fq_crate = dict()
 
     mctx.report_progress("Computing dependencies and features")
-    external_repo_kwargs = []
+
+    feature_resolutions_by_fq_crate = dict()
+
     for package in packages:
         name = package["name"]
         version = package["version"]
-        checksum = package["checksum"]
 
-        resolved_versions = {}
+        file = "{}_{}.json".format(name, version)
+        api_data = json.decode(mctx.read(file))["version"]
+        possible_features = api_data["features"]
+        # Small hack; we will need this at the end to create the external repo.
+        package["edition"] = api_data["edition"]
+
+        possible_deps = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
+
+        possible_dep_version_by_name = {}
         for dep in package.get("dependencies", []):
             if " " not in dep:
                 # Only one version
                 resolved_version = versions_by_name[dep][0]
             else:
                 dep, resolved_version = dep.split(" ")
-            resolved_versions[dep] = resolved_version
+            possible_dep_version_by_name[dep] = resolved_version
 
-        fq_crate = _fq_crate(name, version)
-        resolved_versions_by_fq_crate[fq_crate] = resolved_versions
-
-        file = "{}_{}.json".format(name, version)
-        data = json.decode(mctx.read(file))["version"]
-
-        dependencies = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
-        
-        deps = []
-        windows_deps = []
-        linux_deps = []
-        osx_deps = []
-
-        build_deps = []
-        proc_macro_deps = []
-
-        for dep in dependencies:
-            dep_name = dep["crate_id"]
-            if dep_name not in resolved_versions:
-                # print("NOT FOUND", dep)
-                continue
-
-            resolved_version = resolved_versions[dep_name]
-            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
-
-            kind = dep["kind"]
-            if kind == "dev":
-            # Drop dev deps
-                continue
-            elif kind == "build":
-                build_deps.append(bazel_target)
-
-            # TODO(zbarsky): Real parser?
-            target = dep["target"]
-            if not target:
-                proc_macro = False
-                for x in _PROC_MACROS:
-                    if x in dep_name:
-                        proc_macro = True
-                        break
-                if proc_macro:
-                    proc_macro_deps.append(bazel_target)
-                else:
-                    deps.append(bazel_target)
-
-                    # TODO(zbarsky): per-platform features?
-                    features = dep["features"]
-                    if features:
-                        _add_to_dict(enabled_features_by_fq_crate, _fq_crate(dep_name, resolved_version), features)
-                    if dep["default_features"]:
-                        enable_default_features_by_fq_crate[_fq_crate(dep_name, resolved_version)] = True
-
-            elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
-                windows_deps.append(bazel_target)
-            elif target == "cfg(unix)" or target == 'cfg(not(windows))':
-                linux_deps.append(bazel_target)
-                osx_deps.append(bazel_target)
-            elif target == 'cfg(target_os = "linux")':
-                linux_deps.append(bazel_target)
-            elif target == 'cfg(target_os = "macos")':
-                osx_deps.append(bazel_target)
-
-        possible_features_by_fq_crate[fq_crate] = data["features"]
-
-        conditional_deps = _select(
-            windows = windows_deps,
-            linux = linux_deps,
-            osx = osx_deps,
+        feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
+            _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features)
         )
 
-        kwargs = dict(
+    # Do some round of mutual resolution; bail when no more changes
+    for i in range(10):
+        mctx.report_progress("Running round {} of dependency/feature resolution".format(i))
+
+        had_change = _resolve_one_round(hub_name, feature_resolutions_by_fq_crate)
+        if not had_change:
+            break
+
+    mctx.report_progress("Initializing spokes")
+
+    for package in packages:
+        name = package["name"]
+        version = package["version"]
+
+        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
+
+        conditional_deps = _select(
+            windows = sorted(list(feature_resolutions["windows_deps"])),
+            linux = sorted(list(feature_resolutions["linux_deps"])),
+            osx = sorted(list(feature_resolutions["osx_deps"])),
+        )
+
+        _crate_repository(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
             version = version,
-            checksum = checksum,
-            edition = data["edition"] or "2015",
-            build_deps = build_deps,
-            proc_macro_deps = proc_macro_deps,
-            deps = deps,
+            checksum = package["checksum"],
+            edition = package["edition"] or "2015",
+            build_deps = sorted(list(feature_resolutions["build_deps"])),
+            proc_macro_deps = sorted(list(feature_resolutions["proc_macro_deps"])),
+            deps = sorted(list(feature_resolutions["deps"])),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
+            crate_features = repr(sorted(list(feature_resolutions["features_enabled"]))),
         )
-        external_repo_kwargs.append(kwargs)
 
-    # TODO(zbarsky): Do real feature unification
-    mctx.report_progress("Running rounds of hacky feature unification")
-    for _ in range(3):
-        for package in packages:
-            name = package["name"]
-            version = package["version"]
-
-            fq_crate = _fq_crate(name, version)
-            crate_features = enabled_features_by_fq_crate.get(fq_crate, [])
-            if not crate_features:
-                enabled_features_by_fq_crate[fq_crate] = crate_features
-
-            possible_features = possible_features_by_fq_crate[fq_crate]
-
-            for crate_feature in list(crate_features):
-                crate_features.extend(possible_features.get(crate_feature, []))
-
-            if enable_default_features_by_fq_crate.get(fq_crate):
-                crate_features.extend(possible_features.get("default", []))
-
-            for feature in crate_features:
-                # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
-                unlocked_features = possible_features.get(feature, [])
-                for unlock in unlocked_features:
-                    if "/" in unlock:
-                        dep_name, dep_feature = unlock.split("/")
-                        if dep_name.endswith("?"):
-                            print("Skipping", unlock, "it's optional")
-                            continue
-                        dep_version = resolved_versions_by_fq_crate[fq_crate][dep_name]
-                        _add_to_dict(enabled_features_by_fq_crate, _fq_crate(dep_name, dep_version), [dep_feature])
-
-    mctx.report_progress("Initializing hub and spokes")
-    for kwargs in external_repo_kwargs:
-        resolved_version = _fq_crate(kwargs["crate"], kwargs["version"])
-        crate_features = enabled_features_by_fq_crate.get(resolved_version, [])
-
-        _crate_repository(
-            crate_features = repr(sorted(list(set(crate_features)))),
-            **kwargs,
-        )
+    mctx.report_progress("Initializing hub")
 
     hub_contents = []
     for name, versions in versions_by_name.items():
@@ -263,8 +321,9 @@ alias(
     actual = "{}",
     visibility = ["//visibility:public"],
 )""".format(
-        qualified_name, spoke_name,
-    ))
+                qualified_name,
+                spoke_name,
+            ))
 
         if len(versions) == 1:
             hub_contents.append("""
@@ -273,8 +332,9 @@ alias(
     actual = ":{}",
     visibility = ["//visibility:public"],
 )""".format(
-        name, qualified_name,
-    ))
+                name,
+                qualified_name,
+            ))
 
     _hub_repo(
         name = hub_name,
@@ -303,6 +363,7 @@ print(json.dumps(data, indent=2))
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
             mctx.watch(cfg.cargo_lock)
+
             # TODO(zbarsky): This relies on host python 3.11+, we will need a better solution.
             result = mctx.execute(["python", "convert.py", cfg.cargo_lock])
             if result.return_code != 0:
@@ -316,7 +377,6 @@ print(json.dumps(data, indent=2))
         root_module_direct_dev_deps = [],
         reproducible = True,
     )
-
 
 _from_cargo = tag_class(
     doc = "Generates a repo @crates from a Cargo.toml / Cargo.lock pair.",
@@ -480,7 +540,6 @@ crate = module_extension(
     },
 )
 
-
 def _crate_repository_impl(rctx):
     crate = rctx.attr.crate
     version = rctx.attr.version
@@ -509,7 +568,7 @@ def _crate_repository_impl(rctx):
     is_proc_macro = "proc-macro = true" in cargo_toml_data
 
     # Create a BUILD file with a deps attribute
-    
+
     tags = [
         "crate-name=" + crate,
         "manual",
