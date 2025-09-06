@@ -53,7 +53,6 @@ def _fq_crate(name, version):
 
 def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features):
     return dict(
-        default_features_enabled = False,
         features_enabled = set(),
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
@@ -73,7 +72,6 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
 def _count(feature_resolutions_by_fq_crate):
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
-        n += int(feature_resolutions["default_features_enabled"])
         n += len(feature_resolutions["features_enabled"])
         n += len(feature_resolutions["build_deps"])
         n += len(feature_resolutions["proc_macro_deps"])
@@ -139,10 +137,9 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
                     # TODO(zbarsky): per-platform features?
                     dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
-                    for feature in dep.get("features", []):
-                        dep_feature_resolutions["features_enabled"].add(feature)
+                    dep_feature_resolutions["features_enabled"].update(dep.get("features", []))
                     if dep["default_features"]:
-                        dep_feature_resolutions["default_features_enabled"] = True
+                        dep_feature_resolutions["features_enabled"].add("default")
 
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.add(bazel_target)
@@ -155,13 +152,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                 osx_deps.add(bazel_target)
 
         # Enable any features that are implied by previously-enabled features.
-        if feature_resolutions["default_features_enabled"]:
-            features_enabled.add("default")
-
         for enabled_feature in list(features_enabled):
-            # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
-            for implied_feature in possible_features.get(enabled_feature, []):
-                features_enabled.add(implied_feature.removeprefix("dep:"))
+            features_enabled.update([
+                implied_feature.removeprefix("dep:")
+                # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
+                for implied_feature in possible_features.get(enabled_feature, [])
+            ])
 
         for feature in features_enabled:
             if "/" in feature:
