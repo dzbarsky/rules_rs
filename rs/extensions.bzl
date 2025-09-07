@@ -3,18 +3,107 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 # TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
 # We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
 # For now just hardcode it; try to get crates.io fixed to tell us
-_PROC_MACROS = [
+_PROC_MACROS = set([
+    "arg_enum_proc_macro",
+    "asn1-rs-derive",
+    "asn1-rs-impl",
+    "async-attributes",
+    "async-generic",
     "async-recursion",
+    "async-stream-impl",
     "async-trait",
+    "auto_enums",
+    "bytecheck_derive",
+    "clap_derive",
+    "clap_derive",
+    "clickhouse-derive",
+    "const-random-macro",
+    "const_fn",
+    "ctor-proc-macro",
+    "cxxbridge-macro",
+    "darling_macro",
+    "data-encoding-macro-internal",
+    "delegate",
     "derivative",
+    "derive-new ",
+    "derive-new",
+    "derive_builder_macro",
+    "derive_more",
+    "derive_more-impl",
+    "displaydoc",
+    "document-features",
+    "enum-as-inner",
+    "enum_dispatch",
     "enumflags2_derive",
+    "equator-macro",
+    "err-derive",
+    "foreign-types-macros",
     "futures-macro",
+    "indoc",
+    "macro_rules_attribute-proc_macro",
+    "maybe-async",
+    "mockall_derive",
+    "monostate-impl",
+    "neli-proc-macros",
+    "noop_proc_macro",
+    "num-derive",
+    "openssl-macros",
+    "paste",
+    "pest_derive",
+    "pin-project-internal",
+    "proc-macro-error-attr",
+    "proc-macro-error-attr2",
+    "proc-macro-hack",
+    "profiling-procmacros",
+    "prost-derive",
+    "prost-reflect-derive",
+    "ptr_meta_derive",
+    "pyo3-macros",
+    "pyo3-stub-gen-derive",
+    "rasn-derive",
+    "ref-cast-impl",
+    "rkyv_derive",
+    "rustversion",
+    "sealed",
+    "seq-macro",
     "serde_derive",
     "serde_repr",
+    "serde_with_macros",
+    "serial_test_derive",
+    "simd_helpers",
+    "snafu-derive",
+    "static-iref",
+    "static-regular-grammar",
+    "stdweb-derive",
+    "stdweb-internal-macros",
+    "strum_macros",
+    "test-case-macros",
+    "test-log-macros",
+    "thiserror-impl",
+    "time-macros",
+    "time-macros-impl",
+    "tokio-macros",
     "tracing-attributes",
+    "traitful",
+    "typed-builder-macro",
+    "typespec_macros",
+    "wasm-bindgen-macro",
+    "windows-implement",
+    "windows-interface",
+    "wstd-macro",
+    "yoke-derive",
     "zbus_macros",
+    "zerofrom-derive",
+    "zeroize_derive",
+    "zerovec-derive",
     "zvariant_derive",
-]
+])
+
+_PROC_MACROS_EXCEPTIONS = {
+    "derive_more": ["2.0.1"],
+    "prost-derive": ["0.10.1"],
+    "time-macros": ["0.1.1"],
+}
 
 def _sanitize_crate(name):
     return name.replace("+", "_")
@@ -58,6 +147,7 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
         proc_macro_deps = set(),
+        proc_macro_build_deps = set(),
         deps = set(),
         windows_deps = set(),
         linux_deps = set(),
@@ -75,6 +165,7 @@ def _count(feature_resolutions_by_fq_crate):
         n += len(feature_resolutions["features_enabled"])
         n += len(feature_resolutions["build_deps"])
         n += len(feature_resolutions["proc_macro_deps"])
+        n += len(feature_resolutions["proc_macro_build_deps"])
         n += len(feature_resolutions["deps"])
         n += len(feature_resolutions["windows_deps"])
         n += len(feature_resolutions["linux_deps"])
@@ -97,6 +188,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
         osx_deps = feature_resolutions["osx_deps"]
 
         build_deps = feature_resolutions["build_deps"]
+        proc_macro_build_deps = feature_resolutions["proc_macro_build_deps"]
         proc_macro_deps = feature_resolutions["proc_macro_deps"]
 
         possible_dep_version_by_name = feature_resolutions["possible_dep_version_by_name"]
@@ -115,21 +207,21 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
             bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
 
+            proc_macro = dep_name in _PROC_MACROS and resolved_version not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
+
             kind = dep["kind"]
             if kind == "dev":
                 # Drop dev deps
                 continue
             elif kind == "build":
-                build_deps.add(bazel_target)
+                if proc_macro:
+                    proc_macro_build_deps.add(bazel_target)
+                else:
+                    build_deps.add(bazel_target)
 
             # TODO(zbarsky): Real parser?
             target = dep["target"]
             if not target:
-                proc_macro = False
-                for x in _PROC_MACROS:
-                    if x in dep_name:
-                        proc_macro = True
-                        break
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
                 else:
@@ -167,6 +259,9 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                 if dep_name.endswith("?"):
                     print("Skipping", feature, "for", fq_crate, "it's optional")
                     continue
+                if dep_name not in possible_dep_version_by_name:
+                    print("Skipping", feature, "for", fq_crate, "it's not a dep...")
+                    continue
                 dep_version = possible_dep_version_by_name[dep_name]
                 feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]["features_enabled"].add(dep_feature)
 
@@ -178,6 +273,48 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
     final_count = _count(feature_resolutions_by_fq_crate)
     return final_count > initial_count
+
+def _git_url_to_cargo_toml(url):
+    # Drop query params (?rev=...) and keep only before '#'
+    parts = url.split("#")
+    base = parts[0]
+    sha = parts[1] if len(parts) > 1 else None
+
+    if sha == None:
+        fail("No commit SHA (#...) fragment found in URL: " + url)
+
+    # Example base: https://github.com/dovahcrow/tldextract-rs?rev=63d75b0
+    # Strip query parameters
+    base = base.split("?")[0]
+
+    repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
+
+    return "https://raw.githubusercontent.com/{}/{}/Cargo.toml".format(
+        repo_path,
+        sha,
+    )
+
+def _git_url_to_archive(url):
+    # Drop query params (?rev=...) and keep only before '#'
+    parts = url.split("#")
+    base = parts[0]
+    sha = parts[1] if len(parts) > 1 else None
+
+    if sha == None:
+        fail("No commit SHA (#...) fragment found in URL: " + url)
+
+    # Example base: https://github.com/dovahcrow/tldextract-rs?rev=63d75b0
+    # Strip query parameters
+    base = base.split("?")[0]
+
+    repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
+
+    url = "https://github.com/{}/archive/{}.tar.gz".format(repo_path, sha)
+
+    repo = repo_path.split("/")[1]
+    strip_prefix = repo + "-" + sha
+
+    return url, strip_prefix
 
 def _generate_hub_and_spokes(
         mctx,
@@ -195,7 +332,6 @@ def _generate_hub_and_spokes(
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
     download_tokens = []
-    files = []
 
     versions_by_name = dict()
     for package in packages:
@@ -204,28 +340,43 @@ def _generate_hub_and_spokes(
 
         _add_to_dict(versions_by_name, name, [version])
 
+        source = package["source"]
+
         # TODO(zbarsky): Persist these in lockfile facts?
-        url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
-        file = "{}_{}.json".format(name, version)
-        token = mctx.download(
-            url,
-            file,
-            canonical_id = get_default_canonical_id(mctx, urls = [url]),
-            block = False,
-        )
-        download_tokens.append(token)
-        files.append(file)
+        if source == "registry+https://github.com/rust-lang/crates.io-index":
+            url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
+            file = "{}_{}.json".format(name, version)
+            token = mctx.download(
+                url,
+                file,
+                canonical_id = get_default_canonical_id(mctx, urls = [url]),
+                block = False,
+            )
+            download_tokens.append(token)
 
-        url += "/dependencies"
-        file = "{}_{}_dependencies.json".format(name, version)
-        token = mctx.download(
-            url,
-            file,
-            canonical_id = get_default_canonical_id(mctx, urls = [url]),
-            block = False,
-        )
-        download_tokens.append(token)
+            url += "/dependencies"
+            file = "{}_{}_dependencies.json".format(name, version)
+            token = mctx.download(
+                url,
+                file,
+                canonical_id = get_default_canonical_id(mctx, urls = [url]),
+                block = False,
+            )
+            download_tokens.append(token)
+        elif source.startswith("git+https://github.com/"):
+            url = _git_url_to_cargo_toml(source)
+            file = "{}_{}.Cargo.toml".format(name, version)
+            token = mctx.download(
+                url,
+                file,
+                canonical_id = get_default_canonical_id(mctx, urls = [url]),
+                block = False,
+            )
+            download_tokens.append(token)
+        else:
+            fail("Unknown source " + source)
 
+    # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
     mctx.report_progress("Downloading metadata")
     for token in download_tokens:
         result = token.wait()
@@ -240,14 +391,6 @@ def _generate_hub_and_spokes(
         name = package["name"]
         version = package["version"]
 
-        file = "{}_{}.json".format(name, version)
-        api_data = json.decode(mctx.read(file))["version"]
-        possible_features = api_data["features"]
-        # Small hack; we will need this at the end to create the external repo.
-        package["edition"] = api_data["edition"]
-
-        possible_deps = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
-
         possible_dep_version_by_name = {}
         for dep in package.get("dependencies", []):
             if " " not in dep:
@@ -256,6 +399,41 @@ def _generate_hub_and_spokes(
             else:
                 dep, resolved_version = dep.split(" ")
             possible_dep_version_by_name[dep] = resolved_version
+
+        if package["source"] == "registry+https://github.com/rust-lang/crates.io-index":
+            file = "{}_{}.json".format(name, version)
+            api_data = json.decode(mctx.read(file))["version"]
+            possible_features = api_data["features"]
+            possible_deps = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
+        else:
+            file = "{}_{}.Cargo.toml".format(name, version)
+            cargo_toml_json = _exec_convert_py(mctx, file)
+            possible_features = cargo_toml_json.get("features", {})
+
+            possible_deps = []
+            for dep, spec in cargo_toml_json.get("dependencies", {}).items():
+                if type(spec) == "string":
+                    possible_deps.append({
+                        "kind": "normal",
+                        "crate_id": dep,
+                        "optional": False,
+                        "default_features": True,
+                        "target": None,
+                    })
+                else:
+                    possible_deps.append({
+                        "kind": "normal",
+                        "crate_id": dep,
+                        "optional": spec.get("optional", False),
+                        "default_features": spec.get("default_features", True),
+                        "features": spec.get("features", []),
+                        "target": None,
+                    })
+
+            # TODO(zbarsky): build deps?
+            if not possible_deps:
+                print(name, version, package["source"])
+                print(result.stdout)
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features)
@@ -274,6 +452,7 @@ def _generate_hub_and_spokes(
     for package in packages:
         name = package["name"]
         version = package["version"]
+        checksum = package.get("checksum")
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
@@ -283,14 +462,22 @@ def _generate_hub_and_spokes(
             osx = sorted(list(feature_resolutions["osx_deps"])),
         )
 
+        if checksum:
+            url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version)
+            strip_prefix = "{}-{}".format(name, version)
+        else:
+            url, strip_prefix = _git_url_to_archive(package["source"])
+
         _crate_repository(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
             version = version,
-            checksum = package["checksum"],
-            edition = package["edition"] or "2015",
+            url = url,
+            strip_prefix = strip_prefix,
+            checksum = checksum,
             build_deps = sorted(list(feature_resolutions["build_deps"])),
             proc_macro_deps = sorted(list(feature_resolutions["proc_macro_deps"])),
+            proc_macro_build_deps = sorted(list(feature_resolutions["proc_macro_build_deps"])),
             deps = sorted(list(feature_resolutions["deps"])),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             crate_features = repr(sorted(list(feature_resolutions["features_enabled"]))),
@@ -331,8 +518,8 @@ alias(
         },
     )
 
-def _crate_impl(mctx):
-    mctx.file("convert.py", """
+def _create_convert_py(ctx):
+    ctx.file("convert.py", """
 import sys
 import tomllib
 import json
@@ -343,6 +530,17 @@ with open(sys.argv[1], "rb") as f:
 print(json.dumps(data, indent=2))
 """)
 
+def _exec_convert_py(ctx, file):
+    # TODO(zbarsky): This relies on host python 3.11+, we will need a better solution.
+    result = ctx.execute(["python", "convert.py", file])
+    if result.return_code != 0:
+        fail(result.stdout + "\n" + result.stderr)
+
+    return json.decode(result.stdout)
+
+def _crate_impl(mctx):
+    _create_convert_py(mctx)
+
     direct_deps = []
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
@@ -351,13 +549,7 @@ print(json.dumps(data, indent=2))
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
             mctx.watch(cfg.cargo_lock)
-
-            # TODO(zbarsky): This relies on host python 3.11+, we will need a better solution.
-            result = mctx.execute(["python", "convert.py", cfg.cargo_lock])
-            if result.return_code != 0:
-                fail(result.stdout + "\n" + result.stderr)
-
-            cargo_lock = json.decode(result.stdout)
+            cargo_lock = _exec_convert_py(mctx, cfg.cargo_lock)
             _generate_hub_and_spokes(mctx, cfg.name, cargo_lock)
 
     return mctx.extension_metadata(
@@ -529,31 +721,32 @@ crate = module_extension(
 )
 
 def _crate_repository_impl(rctx):
+    _create_convert_py(rctx)
+
     crate = rctx.attr.crate
     version = rctx.attr.version
     checksum = rctx.attr.checksum
     deps = rctx.attr.deps
 
     # Compute the URL
-    url = "https://crates.io/api/v1/crates/{}/{}/download".format(crate, version)
     rctx.download_and_extract(
-        url,
+        rctx.attr.url,
         type = "tar.gz",
-        canonical_id = get_default_canonical_id(rctx, urls = [url]),
-        strip_prefix = "{}-{}".format(crate, version),
+        canonical_id = get_default_canonical_id(rctx, urls = [rctx.attr.url]),
+        strip_prefix = rctx.attr.strip_prefix,
         sha256 = checksum,
     )
 
-    cargo_toml_data = rctx.read("Cargo.toml")
+    cargo_toml = _exec_convert_py(rctx, "Cargo.toml")
 
-    build_script = None
+    build_script = cargo_toml.get("package", {}).get("build")
     if rctx.path("build.rs").exists:
         build_script = "build.rs"
-    elif 'build = "' in cargo_toml_data:
-        pre = cargo_toml_data[cargo_toml_data.find('build = "') + len('build = "'):]
-        build_script = pre[:pre.find('"')]
 
-    is_proc_macro = "proc-macro = true" in cargo_toml_data
+    is_proc_macro = cargo_toml.get("lib", {}).get("proc-macro", False)
+    lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs")
+    edition = cargo_toml.get("package", {}).get("edition", "2015")
+    crate_name = cargo_toml.get("lib", {}).get("name")
 
     # Create a BUILD file with a deps attribute
 
@@ -590,6 +783,7 @@ cargo_toml_env_vars(
 
 {library_rule_type}(
     name = {crate},
+    crate_name = {crate_name},
     srcs = glob(
         include = ["**/*.rs"],
         allow_empty = True,
@@ -602,7 +796,7 @@ cargo_toml_env_vars(
     ],
     compile_data = {compile_data},
     crate_features = {crate_features},
-    crate_root = "src/lib.rs",
+    crate_root = {lib_path},
     edition = {edition},
     rustc_env_files = [
         ":cargo_toml_env_vars",
@@ -631,6 +825,9 @@ cargo_build_script(
     deps = [
         {build_deps}
     ],
+    proc_macro_deps = [
+        {proc_macro_build_deps}
+    ],
     edition = {edition},
     pkg_name = {crate},
     rustc_env_files = [
@@ -653,10 +850,13 @@ cargo_build_script(
     rctx.file("BUILD.bazel", build_content.format(
         library_rule_type = "rust_proc_macro" if is_proc_macro else "rust_library",
         crate = repr(crate),
+        crate_name = repr(crate_name),
         version = repr(version),
-        edition = repr(rctx.attr.edition),
+        edition = repr(edition),
         crate_features = rctx.attr.crate_features,
+        lib_path = repr(lib_path),
         proc_macro_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_deps]),
+        proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_build_deps]),
         build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         conditional_deps = rctx.attr.conditional_deps,
@@ -670,10 +870,12 @@ _crate_repository = repository_rule(
     attrs = {
         "crate": attr.string(mandatory = True),
         "version": attr.string(mandatory = True),
-        "checksum": attr.string(mandatory = True),
-        "edition": attr.string(mandatory = True),
+        "url": attr.string(mandatory = True),
+        "strip_prefix": attr.string(mandatory = True),
+        "checksum": attr.string(),
         "crate_features": attr.string(mandatory = True),
         "build_deps": attr.string_list(default = []),
+        "proc_macro_build_deps": attr.string_list(default = []),
         "proc_macro_deps": attr.string_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
