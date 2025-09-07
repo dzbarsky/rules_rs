@@ -353,30 +353,27 @@ def _generate_hub_and_spokes(
                 continue
 
             url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
-            file = key + ".json"
             token = mctx.download(
                 url,
-                file,
+                key + ".json",
                 canonical_id = get_default_canonical_id(mctx, urls = [url]),
                 block = False,
             )
             download_tokens.append(token)
 
             url += "/dependencies"
-            file = key + "_dependencies.json"
             token = mctx.download(
                 url,
-                file,
+                key + "_dependencies.json",
                 canonical_id = get_default_canonical_id(mctx, urls = [url]),
                 block = False,
             )
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
             url = _git_url_to_cargo_toml(source)
-            file = "{}_{}.Cargo.toml".format(name, version)
             token = mctx.download(
                 url,
-                file,
+                "{}_{}.Cargo.toml".format(name, version),
                 canonical_id = get_default_canonical_id(mctx, urls = [url]),
                 block = False,
             )
@@ -414,9 +411,7 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
-                file = key + ".json"
-
-                features = json.decode(mctx.read(file))["version"]["features"]
+                features = json.decode(mctx.read(key + ".json"))["version"]["features"]
                 dependencies = json.decode(mctx.read(key + "_dependencies.json"))["dependencies"]
                 for dep in dependencies:
                     dep.pop("downloads")
@@ -434,18 +429,17 @@ def _generate_hub_and_spokes(
                     if not dep["optional"]:
                         dep.pop("optional")
 
-                # Nest a serialized JSON since max path depth is 5.
                 fact = dict(
                     features = features,
                     dependencies = dependencies,
                 )
+                # Nest a serialized JSON since max path depth is 5.
                 facts[key] = json.encode(fact)
 
             possible_features = fact["features"]
             possible_deps = fact["dependencies"]
         else:
-            file = "{}_{}.Cargo.toml".format(name, version)
-            cargo_toml_json = _exec_convert_py(mctx, file)
+            cargo_toml_json = _exec_convert_py(mctx, "{}_{}.Cargo.toml".format(name, version))
             possible_features = cargo_toml_json.get("features", {})
 
             possible_deps = []
@@ -789,6 +783,8 @@ def _crate_repository_impl(rctx):
     lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs")
     edition = cargo_toml.get("package", {}).get("edition", "2015")
     crate_name = cargo_toml.get("lib", {}).get("name")
+
+    rctx.delete("convert.py")
 
     # Create a BUILD file with a deps attribute
 
