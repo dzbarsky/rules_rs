@@ -37,6 +37,7 @@ _PROC_MACROS = set([
     "enumflags2_derive",
     "equator-macro",
     "err-derive",
+    "fix-hidden-lifetime-bug-proc_macros",
     "foreign-types-macros",
     "futures-macro",
     "indoc",
@@ -196,8 +197,17 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
-            dep_name = dep["crate_id"]
-            if dep.get("optional") and dep_name not in features_enabled:
+            if "package" in dep:
+                dep_name = dep["package"]
+                dep_alias = dep["name"]
+            elif "name" in dep:
+                dep_name = dep["name"]
+                dep_alias = dep_name
+            else:
+                dep_name = dep["crate_id"]
+                dep_alias = dep_name
+
+            if dep.get("optional") and dep_alias not in features_enabled:
                 continue
 
             resolved_version = possible_dep_version_by_name.get(dep_name)
@@ -221,7 +231,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
             # TODO(zbarsky): Real parser?
             target = dep.get("target")
-            if not target:
+            if not target or target == 'cfg(not(target_family = "wasm"))':
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
                 else:
@@ -242,6 +252,8 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                 linux_deps.add(bazel_target)
             elif target == 'cfg(target_os = "macos")':
                 osx_deps.add(bazel_target)
+            else:
+                print("Unhandled target", target, "for", dep_name, "in", fq_crate)
 
         # Enable any features that are implied by previously-enabled features.
         implied_features = [
@@ -315,6 +327,20 @@ def _git_url_to_archive(url):
 
     return url, strip_prefix
 
+def _sharded_path(crate):
+    crate = crate.lower()
+    # crates.io-index sharding rules (ASCII names)
+    n = len(crate)
+    if n == 0:
+        fail("empty crate name")
+    if n == 1:
+        return "1/" + crate
+    if n == 2:
+        return "2/" + crate
+    if n == 3:
+        return "3/%s/%s" % (crate[0], crate)
+    return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -352,19 +378,11 @@ def _generate_hub_and_spokes(
                 facts[key] = fact
                 continue
 
-            url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
+            # TODO(zbarsky): dedupe fetches when multiple versions?
+            url = "https://raw.githubusercontent.com/rust-lang/crates.io-index/master/" + _sharded_path(name)
             token = mctx.download(
                 url,
-                key + ".json",
-                canonical_id = get_default_canonical_id(mctx, urls = [url]),
-                block = False,
-            )
-            download_tokens.append(token)
-
-            url += "/dependencies"
-            token = mctx.download(
-                url,
-                key + "_dependencies.json",
+                key + ".jsonl",
                 canonical_id = get_default_canonical_id(mctx, urls = [url]),
                 block = False,
             )
@@ -411,30 +429,38 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
-                features = json.decode(mctx.read(key + ".json"))["version"]["features"]
-                dependencies = json.decode(mctx.read(key + "_dependencies.json"))["dependencies"]
-                for dep in dependencies:
-                    dep.pop("downloads")
-                    dep.pop("id")
-                    dep.pop("req")
-                    dep.pop("version_id")
-                    if dep["default_features"]:
-                        dep.pop("default_features")
-                    if not dep["features"]:
-                        dep.pop("features")
-                    if not dep["target"]:
-                        dep.pop("target")
-                    if dep["kind"] == "normal":
-                        dep.pop("kind")
-                    if not dep["optional"]:
-                        dep.pop("optional")
+                metadatas = mctx.read(key + ".jsonl").strip().split("\n")
+                for metadata in metadatas:
+                    metadata = json.decode(metadata)
+                    if metadata["vers"] != version:
+                        continue
 
-                fact = dict(
-                    features = features,
-                    dependencies = dependencies,
-                )
-                # Nest a serialized JSON since max path depth is 5.
-                facts[key] = json.encode(fact)
+                    features = metadata["features"]
+                    # Crates published with newer Cargo populate this field for `resolver = "2"`.
+                    # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
+                    features.update(metadata.get("features2", {}))
+
+                    dependencies = metadata["deps"]
+
+                    for dep in dependencies:
+                        dep.pop("req")
+                        if dep["default_features"]:
+                            dep.pop("default_features")
+                        if not dep["features"]:
+                            dep.pop("features")
+                        if not dep["target"]:
+                            dep.pop("target")
+                        if dep["kind"] == "normal":
+                            dep.pop("kind")
+                        if not dep["optional"]:
+                            dep.pop("optional")
+
+                    fact = dict(
+                        features = features,
+                        dependencies = dependencies,
+                    )
+                    # Nest a serialized JSON since max path depth is 5.
+                    facts[key] = json.encode(fact)
 
             possible_features = fact["features"]
             possible_deps = fact["dependencies"]
@@ -461,7 +487,6 @@ def _generate_hub_and_spokes(
             # TODO(zbarsky): build deps?
             if not possible_deps:
                 print(name, version, package["source"])
-                print(result.stdout)
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features)
@@ -589,7 +614,7 @@ def _crate_impl(mctx):
         reproducible = True,
     )
 
-    if True:
+    if hasattr(mctx, "facts"):
         kwargs["facts"] = facts
 
     return mctx.extension_metadata(**kwargs)
@@ -608,7 +633,7 @@ _from_cargo = tag_class(
     },
 )
 
-_relative_label_list = attr.string
+_relative_label_list = attr.string_list
 
 # This should be kept in sync with crate_universe/private/crate.bzl.
 _annotation = tag_class(
