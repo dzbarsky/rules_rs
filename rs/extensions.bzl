@@ -197,7 +197,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
             dep_name = dep["crate_id"]
-            if dep["optional"] and dep_name not in features_enabled:
+            if dep.get("optional") and dep_name not in features_enabled:
                 continue
 
             resolved_version = possible_dep_version_by_name.get(dep_name)
@@ -209,7 +209,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
             proc_macro = dep_name in _PROC_MACROS and resolved_version not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
 
-            kind = dep["kind"]
+            kind = dep.get("kind", "normal")
             if kind == "dev":
                 # Drop dev deps
                 continue
@@ -220,7 +220,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                     build_deps.add(bazel_target)
 
             # TODO(zbarsky): Real parser?
-            target = dep["target"]
+            target = dep.get("target")
             if not target:
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
@@ -230,7 +230,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                     # TODO(zbarsky): per-platform features?
                     dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
                     dep_feature_resolutions.features_enabled.update(dep.get("features", []))
-                    if dep["default_features"]:
+                    if dep.get("default_features", True):
                         dep_feature_resolutions.features_enabled.add("default")
 
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
@@ -327,7 +327,10 @@ def _generate_hub_and_spokes(
         cargo_lock (object): Cargo.lock in json format
     """
 
-    # Only examine deps from crates.io
+    existing_facts = getattr(mctx, "facts") or {}
+    facts = {}
+
+    # Ignore workspace members
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
     download_tokens = []
@@ -343,8 +346,14 @@ def _generate_hub_and_spokes(
 
         # TODO(zbarsky): Persist these in lockfile facts?
         if source == "registry+https://github.com/rust-lang/crates.io-index":
+            key = name + "_" + version
+            fact = existing_facts.get(key)
+            if fact:
+                facts[key] = fact
+                continue
+
             url = "https://crates.io/api/v1/crates/{}/{}".format(name, version)
-            file = "{}_{}.json".format(name, version)
+            file = key + ".json"
             token = mctx.download(
                 url,
                 file,
@@ -354,7 +363,7 @@ def _generate_hub_and_spokes(
             download_tokens.append(token)
 
             url += "/dependencies"
-            file = "{}_{}_dependencies.json".format(name, version)
+            file = key + "_dependencies.json"
             token = mctx.download(
                 url,
                 file,
@@ -400,10 +409,40 @@ def _generate_hub_and_spokes(
             possible_dep_version_by_name[dep] = resolved_version
 
         if package["source"] == "registry+https://github.com/rust-lang/crates.io-index":
-            file = "{}_{}.json".format(name, version)
-            api_data = json.decode(mctx.read(file))["version"]
-            possible_features = api_data["features"]
-            possible_deps = json.decode(mctx.read(file.replace(".json", "_dependencies.json")))["dependencies"]
+            key = name + "_" + version
+            fact = facts.get(key)
+            if fact:
+                fact = json.decode(fact)
+            else:
+                file = key + ".json"
+
+                features = json.decode(mctx.read(file))["version"]["features"]
+                dependencies = json.decode(mctx.read(key + "_dependencies.json"))["dependencies"]
+                for dep in dependencies:
+                    dep.pop("downloads")
+                    dep.pop("id")
+                    dep.pop("req")
+                    dep.pop("version_id")
+                    if dep["default_features"]:
+                        dep.pop("default_features")
+                    if not dep["features"]:
+                        dep.pop("features")
+                    if not dep["target"]:
+                        dep.pop("target")
+                    if dep["kind"] == "normal":
+                        dep.pop("kind")
+                    if not dep["optional"]:
+                        dep.pop("optional")
+
+                # Nest a serialized JSON since max path depth is 5.
+                fact = dict(
+                    features = features,
+                    dependencies = dependencies,
+                )
+                facts[key] = json.encode(fact)
+
+            possible_features = fact["features"]
+            possible_deps = fact["dependencies"]
         else:
             file = "{}_{}.Cargo.toml".format(name, version)
             cargo_toml_json = _exec_convert_py(mctx, file)
@@ -415,9 +454,6 @@ def _generate_hub_and_spokes(
                     possible_deps.append({
                         "kind": "normal",
                         "crate_id": dep,
-                        "optional": False,
-                        "default_features": True,
-                        "target": None,
                     })
                 else:
                     possible_deps.append({
@@ -426,7 +462,6 @@ def _generate_hub_and_spokes(
                         "optional": spec.get("optional", False),
                         "default_features": spec.get("default_features", True),
                         "features": spec.get("features", []),
-                        "target": None,
                     })
 
             # TODO(zbarsky): build deps?
@@ -517,6 +552,8 @@ alias(
         },
     )
 
+    return facts
+
 def _create_convert_py(ctx):
     ctx.file("convert.py", """
 import sys
@@ -540,6 +577,7 @@ def _exec_convert_py(ctx, file):
 def _crate_impl(mctx):
     _create_convert_py(mctx)
 
+    facts = {}
     direct_deps = []
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
@@ -549,13 +587,18 @@ def _crate_impl(mctx):
             direct_deps.append(cfg.name)
             mctx.watch(cfg.cargo_lock)
             cargo_lock = _exec_convert_py(mctx, cfg.cargo_lock)
-            _generate_hub_and_spokes(mctx, cfg.name, cargo_lock)
+            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cargo_lock))
 
-    return mctx.extension_metadata(
+    kwargs = dict(
         root_module_direct_deps = direct_deps,
         root_module_direct_dev_deps = [],
         reproducible = True,
     )
+
+    if True:
+        kwargs["facts"] = facts
+
+    return mctx.extension_metadata(**kwargs)
 
 _from_cargo = tag_class(
     doc = "Generates a repo @crates from a Cargo.toml / Cargo.lock pair.",
