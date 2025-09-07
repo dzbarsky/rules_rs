@@ -141,7 +141,7 @@ def _fq_crate(name, version):
     return _sanitize_crate(name + "_" + version)
 
 def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features):
-    return dict(
+    return struct(
         features_enabled = set(),
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
@@ -162,14 +162,14 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
 def _count(feature_resolutions_by_fq_crate):
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
-        n += len(feature_resolutions["features_enabled"])
-        n += len(feature_resolutions["build_deps"])
-        n += len(feature_resolutions["proc_macro_deps"])
-        n += len(feature_resolutions["proc_macro_build_deps"])
-        n += len(feature_resolutions["deps"])
-        n += len(feature_resolutions["windows_deps"])
-        n += len(feature_resolutions["linux_deps"])
-        n += len(feature_resolutions["osx_deps"])
+        n += len(feature_resolutions.features_enabled)
+        n += len(feature_resolutions.build_deps)
+        n += len(feature_resolutions.proc_macro_deps)
+        n += len(feature_resolutions.proc_macro_build_deps)
+        n += len(feature_resolutions.deps)
+        n += len(feature_resolutions.windows_deps)
+        n += len(feature_resolutions.linux_deps)
+        n += len(feature_resolutions.osx_deps)
 
     print("Got count", n)
     return n
@@ -180,22 +180,22 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
     initial_count = _count(feature_resolutions_by_fq_crate)
 
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
-        features_enabled = feature_resolutions["features_enabled"]
+        features_enabled = feature_resolutions.features_enabled
 
-        deps = feature_resolutions["deps"]
-        windows_deps = feature_resolutions["windows_deps"]
-        linux_deps = feature_resolutions["linux_deps"]
-        osx_deps = feature_resolutions["osx_deps"]
+        deps = feature_resolutions.deps
+        windows_deps = feature_resolutions.windows_deps
+        linux_deps = feature_resolutions.linux_deps
+        osx_deps = feature_resolutions.osx_deps
 
-        build_deps = feature_resolutions["build_deps"]
-        proc_macro_build_deps = feature_resolutions["proc_macro_build_deps"]
-        proc_macro_deps = feature_resolutions["proc_macro_deps"]
+        build_deps = feature_resolutions.build_deps
+        proc_macro_build_deps = feature_resolutions.proc_macro_build_deps
+        proc_macro_deps = feature_resolutions.proc_macro_deps
 
-        possible_dep_version_by_name = feature_resolutions["possible_dep_version_by_name"]
-        possible_features = feature_resolutions["possible_features"]
+        possible_dep_version_by_name = feature_resolutions.possible_dep_version_by_name
+        possible_features = feature_resolutions.possible_features
 
         # Propagate features across currently enabled dependencies.
-        for dep in feature_resolutions["possible_deps"]:
+        for dep in feature_resolutions.possible_deps:
             dep_name = dep["crate_id"]
             if dep["optional"] and dep_name not in features_enabled:
                 continue
@@ -229,9 +229,9 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
 
                     # TODO(zbarsky): per-platform features?
                     dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
-                    dep_feature_resolutions["features_enabled"].update(dep.get("features", []))
+                    dep_feature_resolutions.features_enabled.update(dep.get("features", []))
                     if dep["default_features"]:
-                        dep_feature_resolutions["features_enabled"].add("default")
+                        dep_feature_resolutions.features_enabled.add("default")
 
             elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
                 windows_deps.add(bazel_target)
@@ -244,30 +244,29 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                 osx_deps.add(bazel_target)
 
         # Enable any features that are implied by previously-enabled features.
-        for enabled_feature in list(features_enabled):
-            features_enabled.update([
-                implied_feature.removeprefix("dep:")
-                # A missing feature just means someone tried to enable a feature that doesn't exist; Cargo doesn't care.
-                for implied_feature in possible_features.get(enabled_feature, [])
-            ])
+        implied_features = [
+            implied_feature.removeprefix("dep:")
+            for enabled_feature in features_enabled
+            for implied_feature in possible_features.get(enabled_feature, [])
+        ]
 
-        for feature in features_enabled:
-            if "/" in feature:
-                dep_name, dep_feature = feature.split("/")
+        dep_features = [feature for feature in implied_features if "/" in feature]
+        for feature in dep_features:
+            dep_name, dep_feature = feature.split("/")
 
-                # TODO(zbarsky): Is this correct?
-                if dep_name.endswith("?"):
-                    print("Skipping", feature, "for", fq_crate, "it's optional")
-                    continue
-                if dep_name not in possible_dep_version_by_name:
-                    print("Skipping", feature, "for", fq_crate, "it's not a dep...")
-                    continue
-                dep_version = possible_dep_version_by_name[dep_name]
-                feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]["features_enabled"].add(dep_feature)
+            # TODO(zbarsky): Is this correct?
+            if dep_name.endswith("?"):
+                print("Skipping", feature, "for", fq_crate, "it's optional")
+                continue
+            if dep_name not in possible_dep_version_by_name:
+                print("Skipping", feature, "for", fq_crate, "it's not a dep...")
+                continue
+            dep_version = possible_dep_version_by_name[dep_name]
+            feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
 
-        feature_resolutions["features_enabled"] = set([
+        feature_resolutions.features_enabled.update([
             f
-            for f in features_enabled
+            for f in implied_features
             if "/" not in f
         ])
 
@@ -457,9 +456,9 @@ def _generate_hub_and_spokes(
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
         conditional_deps = _select(
-            windows = sorted(list(feature_resolutions["windows_deps"])),
-            linux = sorted(list(feature_resolutions["linux_deps"])),
-            osx = sorted(list(feature_resolutions["osx_deps"])),
+            windows = sorted(feature_resolutions.windows_deps),
+            linux = sorted(feature_resolutions.linux_deps),
+            osx = sorted(feature_resolutions.osx_deps),
         )
 
         if checksum:
@@ -475,12 +474,12 @@ def _generate_hub_and_spokes(
             url = url,
             strip_prefix = strip_prefix,
             checksum = checksum,
-            build_deps = sorted(list(feature_resolutions["build_deps"])),
-            proc_macro_deps = sorted(list(feature_resolutions["proc_macro_deps"])),
-            proc_macro_build_deps = sorted(list(feature_resolutions["proc_macro_build_deps"])),
-            deps = sorted(list(feature_resolutions["deps"])),
+            build_deps = sorted(feature_resolutions.build_deps),
+            proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
+            proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
+            deps = sorted(feature_resolutions.deps),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
-            crate_features = repr(sorted(list(feature_resolutions["features_enabled"]))),
+            crate_features = repr(sorted(feature_resolutions.features_enabled)),
         )
 
     mctx.report_progress("Initializing hub")
@@ -544,7 +543,7 @@ def _crate_impl(mctx):
     direct_deps = []
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
-            fail("`.from_specs` is required. Please update {}".format(mod.name))
+            fail("`.from_cargo` is required. Please update {}".format(mod.name))
 
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
