@@ -200,11 +200,8 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
             if "package" in dep:
                 dep_name = dep["package"]
                 dep_alias = dep["name"]
-            elif "name" in dep:
-                dep_name = dep["name"]
-                dep_alias = dep_name
             else:
-                dep_name = dep["crate_id"]
+                dep_name = dep["name"]
                 dep_alias = dep_name
 
             if dep.get("optional") and dep_alias not in features_enabled:
@@ -472,13 +469,11 @@ def _generate_hub_and_spokes(
             for dep, spec in cargo_toml_json.get("dependencies", {}).items():
                 if type(spec) == "string":
                     possible_deps.append({
-                        "kind": "normal",
-                        "crate_id": dep,
+                        "name": dep,
                     })
                 else:
                     possible_deps.append({
-                        "kind": "normal",
-                        "crate_id": dep,
+                        "name": dep,
                         "optional": spec.get("optional", False),
                         "default_features": spec.get("default_features", True),
                         "features": spec.get("features", []),
