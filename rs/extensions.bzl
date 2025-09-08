@@ -1,4 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
+load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
 
 # TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
 # We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
@@ -109,22 +110,18 @@ _PROC_MACROS_EXCEPTIONS = {
 def _sanitize_crate(name):
     return name.replace("+", "_")
 
-def _select(windows = [], linux = [], osx = []):
+def _select(platform_items, default = []):
     branches = []
 
-    if windows:
-        branches.append(("@platforms//os:windows", windows))
-
-    if linux:
-        branches.append(("@platforms//os:linux", linux))
-
-    if osx:
-        branches.append(("@platforms//os:osx", osx))
+    for triple, items in platform_items.items():
+        if items:
+            triple = triple.replace("-musl", "-gnu")
+            branches.append(("@rules_rust//rust/platform:" + triple, sorted(items) if type(items) == "set" else items))
 
     if not branches:
         return ""
 
-    branches.append(("//conditions:default", []))
+    branches.append(("//conditions:default", default))
 
     return """select({
         %s
@@ -141,7 +138,7 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return _sanitize_crate(name + "_" + version)
 
-def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features):
+def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples):
     return struct(
         features_enabled = set(),
 
@@ -150,9 +147,9 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
         proc_macro_deps = set(),
         proc_macro_build_deps = set(),
         deps = set(),
-        windows_deps = set(),
-        linux_deps = set(),
-        osx_deps = set(),
+        platform_deps = {triple: set() for triple in platform_triples},
+        aliases = dict(),
+        platform_aliases = {triple: dict() for triple in platform_triples},
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
         possible_deps = possible_deps,
@@ -168,15 +165,17 @@ def _count(feature_resolutions_by_fq_crate):
         n += len(feature_resolutions.proc_macro_deps)
         n += len(feature_resolutions.proc_macro_build_deps)
         n += len(feature_resolutions.deps)
-        n += len(feature_resolutions.windows_deps)
-        n += len(feature_resolutions.linux_deps)
-        n += len(feature_resolutions.osx_deps)
+        for triple_deps in feature_resolutions.platform_deps.values():
+            n += len(triple_deps)
+
+        n += len(feature_resolutions.aliases)
+        for triple_aliases in feature_resolutions.platform_aliases.values():
+            n += len(triple_aliases)
 
     print("Got count", n)
     return n
 
-def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
-    print("hi")
+def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples):
     # Resolution process always enables new crates/features so we can just count total enabled
     # instead of being careful about change tracking.
     initial_count = _count(feature_resolutions_by_fq_crate)
@@ -185,9 +184,10 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
         features_enabled = feature_resolutions.features_enabled
 
         deps = feature_resolutions.deps
-        windows_deps = feature_resolutions.windows_deps
-        linux_deps = feature_resolutions.linux_deps
-        osx_deps = feature_resolutions.osx_deps
+        platform_deps = feature_resolutions.platform_deps
+
+        aliases = feature_resolutions.aliases
+        platform_aliases = feature_resolutions.platform_aliases
 
         build_deps = feature_resolutions.build_deps
         proc_macro_build_deps = feature_resolutions.proc_macro_build_deps
@@ -227,31 +227,30 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
                 else:
                     build_deps.add(bazel_target)
 
-            # TODO(zbarsky): Real parser?
             target = dep.get("target")
-            if not target or target == 'cfg(not(target_family = "wasm"))':
+            if not target:
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
                 else:
                     deps.add(bazel_target)
+                    if dep_name != dep_alias:
+                        aliases[bazel_target] = dep_alias
 
                     # TODO(zbarsky): per-platform features?
                     dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
                     dep_feature_resolutions.features_enabled.update(dep.get("features", []))
                     if dep.get("default_features", True):
                         dep_feature_resolutions.features_enabled.add("default")
-
-            elif target == "cfg(windows)" or target == 'cfg(target_os = "windows")':
-                windows_deps.add(bazel_target)
-            elif target == "cfg(unix)" or target == "cfg(not(windows))":
-                linux_deps.add(bazel_target)
-                osx_deps.add(bazel_target)
-            elif target == 'cfg(target_os = "linux")':
-                linux_deps.add(bazel_target)
-            elif target == 'cfg(target_os = "macos")':
-                osx_deps.add(bazel_target)
             else:
-                print("Unhandled target", target, "for", dep_name, "in", fq_crate)
+                # TODO(zbarsky): Lots of opportunity to save computations here.
+                match = cfg_matches_for_triples(target, platform_triples)
+                for triple in platform_triples:
+                    if match[triple]:
+                        platform_deps[triple].add(bazel_target)
+                        if dep_name != dep_alias:
+                            platform_aliases[triple][bazel_target] = dep_alias
+
+                # print(dep_name, target, match)
 
         # Enable any features that are implied by previously-enabled features.
         implied_features = [
@@ -327,6 +326,7 @@ def _git_url_to_archive(url):
 
 def _sharded_path(crate):
     crate = crate.lower()
+
     # crates.io-index sharding rules (ASCII names)
     n = len(crate)
     if n == 0:
@@ -342,13 +342,15 @@ def _sharded_path(crate):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
-        cargo_lock):
+        cargo_lock,
+        platform_triples):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
         mctx (module_ctx): The module context object.
         hub_name (string): name
         cargo_lock (object): Cargo.lock in json format
+        platform_triples (list[string]): Triples to resolve for
     """
 
     existing_facts = getattr(mctx, "facts") or {}
@@ -434,6 +436,7 @@ def _generate_hub_and_spokes(
                         continue
 
                     features = metadata["features"]
+
                     # Crates published with newer Cargo populate this field for `resolver = "2"`.
                     # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
                     features.update(metadata.get("features2", {}))
@@ -457,6 +460,7 @@ def _generate_hub_and_spokes(
                         features = features,
                         dependencies = dependencies,
                     )
+
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
 
@@ -485,14 +489,14 @@ def _generate_hub_and_spokes(
                 print(name, version, package["source"])
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
-            _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features)
+            _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples)
         )
 
     # Do some round of mutual resolution; bail when no more changes
     for i in range(10):
         mctx.report_progress("Running round {} of dependency/feature resolution".format(i))
 
-        had_change = _resolve_one_round(hub_name, feature_resolutions_by_fq_crate)
+        had_change = _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples)
         if not had_change:
             break
 
@@ -505,11 +509,8 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
-        conditional_deps = _select(
-            windows = sorted(feature_resolutions.windows_deps),
-            linux = sorted(feature_resolutions.linux_deps),
-            osx = sorted(feature_resolutions.osx_deps),
-        )
+        conditional_deps = _select(feature_resolutions.platform_deps)
+        conditional_aliases = _select(feature_resolutions.platform_aliases, default = {})
 
         if checksum:
             url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version)
@@ -529,6 +530,8 @@ def _generate_hub_and_spokes(
             proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
             deps = sorted(feature_resolutions.deps),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
+            aliases = feature_resolutions.aliases,
+            conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
             crate_features = repr(sorted(feature_resolutions.features_enabled)),
         )
 
@@ -602,7 +605,7 @@ def _crate_impl(mctx):
             direct_deps.append(cfg.name)
             mctx.watch(cfg.cargo_lock)
             cargo_lock = _exec_convert_py(mctx, cfg.cargo_lock)
-            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cargo_lock))
+            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cargo_lock, cfg.platform_triples))
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -626,6 +629,9 @@ _from_cargo = tag_class(
     } | {
         "cargo_toml": attr.label(),
         "cargo_lock": attr.label(),
+        "platform_triples": attr.string_list(
+            mandatory = True,
+        ),
     },
 )
 
@@ -847,6 +853,9 @@ cargo_toml_env_vars(
         include = ["**/*.rs"],
         allow_empty = True,
     ),
+    aliases = {{
+        {aliases}
+    }}{conditional_aliases},
     deps = [
         {deps}
     ]{conditional_deps},
@@ -919,6 +928,8 @@ cargo_build_script(
         build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
         conditional_deps = rctx.attr.conditional_deps,
+        aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in rctx.attr.aliases.items()]),
+        conditional_aliases = rctx.attr.conditional_aliases,
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         build_script = repr(build_script),
         compile_data = compile_data,
@@ -938,6 +949,8 @@ _crate_repository = repository_rule(
         "proc_macro_deps": attr.string_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
+        "aliases": attr.label_keyed_string_dict(),
+        "conditional_aliases": attr.string(default = ""),
     },
 )
 
