@@ -176,6 +176,7 @@ def _count(feature_resolutions_by_fq_crate):
     return n
 
 def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate):
+    print("hi")
     # Resolution process always enables new crates/features so we can just count total enabled
     # instead of being careful about change tracking.
     initial_count = _count(feature_resolutions_by_fq_crate)
