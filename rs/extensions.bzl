@@ -1,11 +1,14 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
+load("//rs/private:semver.bzl", "select_matching_version")
+
 
 # TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
 # We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
 # For now just hardcode it; try to get crates.io fixed to tell us
 _PROC_MACROS = set([
     "arg_enum_proc_macro",
+    "arrow_convert_derive",
     "asn1-rs-derive",
     "asn1-rs-impl",
     "async-attributes",
@@ -14,7 +17,10 @@ _PROC_MACROS = set([
     "async-stream-impl",
     "async-trait",
     "auto_enums",
+    "axum-macros",
+    "biscuit-quote",
     "bytecheck_derive",
+    "cached_proc_macro",
     "clap_derive",
     "clap_derive",
     "clickhouse-derive",
@@ -46,12 +52,14 @@ _PROC_MACROS = set([
     "maybe-async",
     "mockall_derive",
     "monostate-impl",
+    "nalgebra-macros",
     "neli-proc-macros",
     "noop_proc_macro",
     "num-derive",
     "openssl-macros",
     "paste",
     "pest_derive",
+    "phf_macros",
     "pin-project-internal",
     "proc-macro-error-attr",
     "proc-macro-error-attr2",
@@ -60,6 +68,7 @@ _PROC_MACROS = set([
     "prost-derive",
     "prost-reflect-derive",
     "ptr_meta_derive",
+    "pyo3-async-runtimes-macros",
     "pyo3-macros",
     "pyo3-stub-gen-derive",
     "rasn-derive",
@@ -89,6 +98,8 @@ _PROC_MACROS = set([
     "traitful",
     "typed-builder-macro",
     "typespec_macros",
+    "validator_derive",
+    "valuable-derive",
     "wasm-bindgen-macro",
     "windows-implement",
     "windows-interface",
@@ -378,16 +389,18 @@ def _sharded_path(crate):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
-        cargo_lock,
+        cargo_lock_path,
         platform_triples):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
         mctx (module_ctx): The module context object.
         hub_name (string): name
-        cargo_lock (object): Cargo.lock in json format
+        cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
     """
+    mctx.watch(cargo_lock_path)
+    cargo_lock = _exec_convert_py(mctx, cargo_lock_path)
 
     existing_facts = getattr(mctx, "facts") or {}
     facts = {}
@@ -434,6 +447,15 @@ def _generate_hub_and_spokes(
             download_tokens.append(token)
         else:
             fail("Unknown source " + source)
+
+    result = mctx.execute(
+        # TODO(zbarsky): Use hermetic cargo...
+        ["cargo", "metadata", "--no-deps", "--format-version=1", "--quiet"],
+        working_directory = str(mctx.path(cargo_lock_path).dirname),
+    )
+    if result.return_code != 0:
+        fail(result.stdout + "\n" + result.stderr)
+    cargo_metadata = json.decode(result.stdout)
 
     # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
     mctx.report_progress("Downloading metadata")
@@ -527,6 +549,22 @@ def _generate_hub_and_spokes(
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples)
         )
+
+    # Set initial set of features from Cargo.tomls
+    for package in cargo_metadata["packages"]:
+        for dep in package["dependencies"]:
+            if dep["source"] != "registry+https://github.com/rust-lang/crates.io-index":
+                continue
+            name = dep["name"]
+            versions = versions_by_name[name]
+            version = select_matching_version(dep["req"], versions)
+            if not version:
+                fail("Could not solve version for %s %s among %s" % (name, dep["req"], versions))
+
+            features = dep["features"]
+            if dep["uses_default_features"]:
+                features.append("default")
+            feature_resolutions_by_fq_crate[_fq_crate(name, version)].features_enabled.update(features)
 
     # Do some round of mutual resolution; bail when no more changes
     for i in range(10):
@@ -645,9 +683,7 @@ def _crate_impl(mctx):
 
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
-            mctx.watch(cfg.cargo_lock)
-            cargo_lock = _exec_convert_py(mctx, cfg.cargo_lock)
-            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cargo_lock, cfg.platform_triples))
+            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cfg.cargo_lock, cfg.platform_triples))
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -921,7 +957,7 @@ cargo_toml_env_vars(
 )
 """
 
-    if build_script:
+    if crate != "libduckdb-sys" and build_script:
         deps = [":_bs"] + deps
         build_content += """
 

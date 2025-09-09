@@ -1,3 +1,6 @@
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":semver_test.bzl", "semver_select_tests")
 
 cfg_parser_tests()
+
+semver_select_tests()
