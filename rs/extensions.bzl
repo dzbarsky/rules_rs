@@ -235,7 +235,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     if dep_alias not in feature_set:
                         continue
 
-                    platform_deps[triple].add(bazel_target)
+                    if proc_macro:
+                        # TODO(zbarsky): should be platform-specific, but this proc_macro stuff should get simplified anyway
+                        proc_macro_deps.add(bazel_target)
+                    else:
+                        platform_deps[triple].add(bazel_target)
+
                     if dep_name != dep_alias:
                         platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
 
@@ -308,13 +313,13 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             if not dep_version:
                 # Maybe it's an alias?
                 for dep in feature_resolutions.possible_deps:
-                    if dep.get("name") == dep_name:
+                    if dep.get("name") == dep_name and "package" in dep:
                         dep_name = dep["package"]
                         break
-                dep_version = possible_dep_version_by_name[dep_name]
+                dep_version = possible_dep_version_by_name.get(dep_name)
 
             if not dep_version:
-                print("Skipping", feature, "for", fq_crate, "it's not a dep...")
+                print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                 continue
 
             feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
@@ -397,12 +402,14 @@ def _sharded_path(crate):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
+        annotations,
         cargo_lock_path,
         platform_triples):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
         mctx (module_ctx): The module context object.
+        annotations (dict): Annotation tags to apply.
         hub_name (string): name
         cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
@@ -605,6 +612,24 @@ def _generate_hub_and_spokes(
         else:
             url, strip_prefix = _git_url_to_archive(package["source"])
 
+        annotation = annotations.get(name)
+        if annotation:
+            build_script_data = annotation.build_script_data
+            build_script_env = annotation.build_script_env
+            build_script_toolchains = annotation.build_script_toolchains
+            data = annotation.data
+            deps = annotation.deps
+            crate_features = annotation.crate_features
+            rustc_flags = annotation.rustc_flags
+        else:
+            build_script_data = []
+            build_script_env = {}
+            build_script_toolchains = []
+            data = []
+            deps = []
+            crate_features = []
+            rustc_flags = []
+
         _crate_repository(
             name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
             crate = name,
@@ -612,14 +637,19 @@ def _generate_hub_and_spokes(
             url = url,
             strip_prefix = strip_prefix,
             checksum = checksum,
-            build_deps = sorted(feature_resolutions.build_deps),
+            build_deps = sorted(feature_resolutions.build_deps | set(deps)),
+            build_script_data = build_script_data,
+            build_script_env = build_script_env,
+            build_script_toolchains = build_script_toolchains,
+            rustc_flags = rustc_flags,
             proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
             proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
+            data = data,
             deps = sorted(feature_resolutions.deps),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             aliases = feature_resolutions.aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
-            crate_features = repr(sorted(feature_resolutions.features_enabled)),
+            crate_features = repr(sorted(feature_resolutions.features_enabled | set(crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
         )
 
@@ -691,7 +721,14 @@ def _crate_impl(mctx):
 
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
-            facts.update(_generate_hub_and_spokes(mctx, cfg.name, cfg.cargo_lock, cfg.platform_triples))
+
+            annotations = {
+                annotation.crate: annotation
+                for annotation in mod.tags.annotation
+                if cfg.name in (annotation.repositories or [cfg.name])
+            }
+
+            facts.update(_generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples))
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -955,7 +992,7 @@ cargo_toml_env_vars(
     rustc_env_files = [
         ":cargo_toml_env_vars",
     ],
-    rustc_flags = [
+    rustc_flags = {rustc_flags} + [
         "--cap-lints=allow",
     ],
     tags = [
@@ -975,10 +1012,14 @@ cargo_build_script(
     crate_features = {crate_features}{conditional_crate_features},
     crate_name = "build_script_build",
     crate_root = {build_script},
-    data = {compile_data},
+    data = {compile_data} + [
+        {build_script_data}
+    ],
     deps = [
         {build_deps}
     ],
+    build_script_env = {build_script_env},
+    toolchains = {build_script_toolchains},
     proc_macro_deps = [
         {proc_macro_build_deps}
     ],
@@ -1013,7 +1054,12 @@ cargo_build_script(
         proc_macro_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_deps]),
         proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_build_deps]),
         build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
+        build_script_data = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_script_data]),
+        build_script_env = repr(rctx.attr.build_script_env),
+        build_script_toolchains = repr([str(t) for t in rctx.attr.build_script_toolchains]),
+        rustc_flags = repr(rctx.attr.rustc_flags or []),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
+        data = ",\n        ".join(['"%s"' % d for d in rctx.attr.data]),
         conditional_deps = rctx.attr.conditional_deps,
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in rctx.attr.aliases.items()]),
         conditional_aliases = rctx.attr.conditional_aliases,
@@ -1030,15 +1076,20 @@ _crate_repository = repository_rule(
         "url": attr.string(mandatory = True),
         "strip_prefix": attr.string(mandatory = True),
         "checksum": attr.string(),
-        "crate_features": attr.string(mandatory = True),
-        "conditional_crate_features": attr.string(default = ""),
-        "build_deps": attr.string_list(default = []),
-        "proc_macro_build_deps": attr.string_list(default = []),
+        "build_deps": attr.label_list(default = []),
+        "build_script_data": attr.label_list(default = []),
+        "build_script_env": attr.string_dict(),
+        "build_script_toolchains": attr.label_list(),
+        "rustc_flags": attr.string_list(),
         "proc_macro_deps": attr.string_list(default = []),
+        "proc_macro_build_deps": attr.string_list(default = []),
+        "data": attr.label_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
         "aliases": attr.label_keyed_string_dict(),
         "conditional_aliases": attr.string(default = ""),
+        "crate_features": attr.string(mandatory = True),
+        "conditional_crate_features": attr.string(default = ""),
     },
 )
 
