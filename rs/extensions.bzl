@@ -342,7 +342,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
     final_count = _count(feature_resolutions_by_fq_crate)
     return final_count > initial_count
 
-def _git_url_to_cargo_toml(url):
+def _parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
     parts = url.split("#")
     base = parts[0]
@@ -357,27 +357,14 @@ def _git_url_to_cargo_toml(url):
 
     repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
 
-    return "https://raw.githubusercontent.com/{}/{}/Cargo.toml".format(
-        repo_path,
-        sha,
-    )
+    return repo_path, sha
+
+def _git_url_to_cargo_toml(url):
+    repo_path, sha = _parse_git_url(url)
+    return "https://raw.githubusercontent.com/{}/{}/Cargo.toml".format(repo_path, sha)
 
 def _git_url_to_archive(url):
-    # Drop query params (?rev=...) and keep only before '#'
-    parts = url.split("#")
-    base = parts[0]
-    sha = parts[1] if len(parts) > 1 else None
-
-    if sha == None:
-        fail("No commit SHA (#...) fragment found in URL: " + url)
-
-    # Example base: https://github.com/dovahcrow/tldextract-rs?rev=63d75b0
-    # Strip query parameters
-    base = base.split("?")[0]
-
-    repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
-
-    url = "https://github.com/{}/archive/{}.tar.gz".format(repo_path, sha)
+    repo_path, sha = _parse_git_url(url)
 
     repo = repo_path.split("/")[1]
     strip_prefix = repo + "-" + sha
