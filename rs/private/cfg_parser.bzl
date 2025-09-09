@@ -244,7 +244,7 @@ def _eval_eq(ctx, key, value):
     if key in known:
         return ctx.get(key, "") == value
     # Unknown keys evaluate to False
-    fail("Unknown key %s" % key)
+    # fail("Unknown key %s" % key)
     return False
 
 def _eval_pred(ctx, name):

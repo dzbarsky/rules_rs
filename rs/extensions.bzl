@@ -141,6 +141,7 @@ def _fq_crate(name, version):
 def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples):
     return struct(
         features_enabled = set(),
+        platform_features_enabled = {triple: set() for triple in platform_triples},
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
@@ -161,6 +162,9 @@ def _count(feature_resolutions_by_fq_crate):
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
         n += len(feature_resolutions.features_enabled)
+        for triple_features in feature_resolutions.platform_features_enabled.values():
+            n += len(triple_features)
+
         n += len(feature_resolutions.build_deps)
         n += len(feature_resolutions.proc_macro_deps)
         n += len(feature_resolutions.proc_macro_build_deps)
@@ -182,6 +186,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
+        platform_features_enabled = feature_resolutions.platform_features_enabled
 
         deps = feature_resolutions.deps
         platform_deps = feature_resolutions.platform_deps
@@ -205,9 +210,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_name = dep["name"]
                 dep_alias = dep_name
 
-            if dep.get("optional") and dep_alias not in features_enabled:
-                continue
-
             resolved_version = possible_dep_version_by_name.get(dep_name)
             if not resolved_version:
                 # print("NOT FOUND", dep)
@@ -216,6 +218,22 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
 
             proc_macro = dep_name in _PROC_MACROS and resolved_version not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
+            dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
+
+            if dep.get("optional") and dep_alias not in features_enabled:
+                for triple, feature_set in platform_features_enabled.items():
+                    if dep_alias not in feature_set:
+                        continue
+
+                    platform_deps[triple].add(bazel_target)
+                    if dep_name != dep_alias:
+                        platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
+
+                    dep_feature_resolutions.platform_features_enabled[triple].update(dep.get("features", []))
+                    if dep.get("default_features", True):
+                        dep_feature_resolutions.platform_features_enabled[triple].add("default")
+
+                continue
 
             kind = dep.get("kind", "normal")
             if kind == "dev":
@@ -234,10 +252,8 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 else:
                     deps.add(bazel_target)
                     if dep_name != dep_alias:
-                        aliases[bazel_target] = dep_alias
+                        aliases[bazel_target] = dep_alias.replace("-", "_")
 
-                    # TODO(zbarsky): per-platform features?
-                    dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
                     dep_feature_resolutions.features_enabled.update(dep.get("features", []))
                     if dep.get("default_features", True):
                         dep_feature_resolutions.features_enabled.add("default")
@@ -248,9 +264,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     if match[triple]:
                         platform_deps[triple].add(bazel_target)
                         if dep_name != dep_alias:
-                            platform_aliases[triple][bazel_target] = dep_alias
+                            platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
+                        dep_feature_resolutions.platform_features_enabled[triple].update(dep.get("features", []))
+                        if dep.get("default_features", True):
+                            dep_feature_resolutions.platform_features_enabled[triple].add("default")
 
-                # print(dep_name, target, match)
+                # print(dep_name, dep, target, match)
 
         # Enable any features that are implied by previously-enabled features.
         implied_features = [
@@ -259,25 +278,42 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             for implied_feature in possible_features.get(enabled_feature, [])
         ]
 
+        features_enabled.update([
+            f
+            for f in implied_features
+            if "/" not in f
+        ])
+
         dep_features = [feature for feature in implied_features if "/" in feature]
         for feature in dep_features:
             dep_name, dep_feature = feature.split("/")
 
-            # TODO(zbarsky): Is this correct?
             if dep_name.endswith("?"):
-                print("Skipping", feature, "for", fq_crate, "it's optional")
-                continue
+                dep_name = dep_name[:-1]
+            else:
+                # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
+                features_enabled.add(dep_name)
+
             if dep_name not in possible_dep_version_by_name:
                 print("Skipping", feature, "for", fq_crate, "it's not a dep...")
                 continue
             dep_version = possible_dep_version_by_name[dep_name]
             feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
 
-        feature_resolutions.features_enabled.update([
-            f
-            for f in implied_features
-            if "/" not in f
-        ])
+        for target_triple, feature_set in platform_features_enabled.items():
+            implied_features = [
+                implied_feature.removeprefix("dep:")
+                for enabled_feature in feature_set
+                for implied_feature in possible_features.get(enabled_feature, [])
+            ]
+
+            feature_set.update([
+                f
+                for f in implied_features
+                if "/" not in f
+            ])
+
+        # TODO(zbarsky): do we need dep features for platform selects?
 
     final_count = _count(feature_resolutions_by_fq_crate)
     return final_count > initial_count
@@ -509,8 +545,13 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
+        # Remove conditional deps that are present on all platforms already.
+        for platform_dep_set in feature_resolutions.platform_deps.values():
+            platform_dep_set.difference_update(feature_resolutions.deps)
+
         conditional_deps = _select(feature_resolutions.platform_deps)
         conditional_aliases = _select(feature_resolutions.platform_aliases, default = {})
+        conditional_crate_features = _select(feature_resolutions.platform_features_enabled)
 
         if checksum:
             url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version)
@@ -533,6 +574,7 @@ def _generate_hub_and_spokes(
             aliases = feature_resolutions.aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
             crate_features = repr(sorted(feature_resolutions.features_enabled)),
+            conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
         )
 
     mctx.report_progress("Initializing hub")
@@ -863,7 +905,7 @@ cargo_toml_env_vars(
         {proc_macro_deps}
     ],
     compile_data = {compile_data},
-    crate_features = {crate_features},
+    crate_features = {crate_features}{conditional_crate_features},
     crate_root = {lib_path},
     edition = {edition},
     rustc_env_files = [
@@ -886,7 +928,7 @@ cargo_toml_env_vars(
 cargo_build_script(
     name = "_bs",
     compile_data = {compile_data},
-    crate_features = {crate_features},
+    crate_features = {crate_features}{conditional_crate_features},
     crate_name = "build_script_build",
     crate_root = {build_script},
     data = {compile_data},
@@ -922,6 +964,7 @@ cargo_build_script(
         version = repr(version),
         edition = repr(edition),
         crate_features = rctx.attr.crate_features,
+        conditional_crate_features = rctx.attr.conditional_crate_features,
         lib_path = repr(lib_path),
         proc_macro_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_deps]),
         proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_build_deps]),
@@ -944,6 +987,7 @@ _crate_repository = repository_rule(
         "strip_prefix": attr.string(mandatory = True),
         "checksum": attr.string(),
         "crate_features": attr.string(mandatory = True),
+        "conditional_crate_features": attr.string(default = ""),
         "build_deps": attr.string_list(default = []),
         "proc_macro_build_deps": attr.string_list(default = []),
         "proc_macro_deps": attr.string_list(default = []),
