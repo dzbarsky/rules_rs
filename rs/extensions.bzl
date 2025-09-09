@@ -2,7 +2,6 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
 load("//rs/private:semver.bzl", "select_matching_version")
 
-
 # TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
 # We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
 # For now just hardcode it; try to get crates.io fixed to tell us
@@ -305,13 +304,22 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
                 features_enabled.add(dep_name)
 
-            if dep_name not in possible_dep_version_by_name:
+            dep_version = possible_dep_version_by_name.get(dep_name)
+            if not dep_version:
+                # Maybe it's an alias?
+                for dep in feature_resolutions.possible_deps:
+                    if dep.get("name") == dep_name:
+                        dep_name = dep["package"]
+                        break
+                dep_version = possible_dep_version_by_name[dep_name]
+
+            if not dep_version:
                 print("Skipping", feature, "for", fq_crate, "it's not a dep...")
                 continue
-            dep_version = possible_dep_version_by_name[dep_name]
+
             feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
 
-        for target_triple, feature_set in platform_features_enabled.items():
+        for feature_set in platform_features_enabled.values():
             implied_features = [
                 implied_feature.removeprefix("dep:")
                 for enabled_feature in feature_set

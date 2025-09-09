@@ -87,16 +87,16 @@ def _cfg_parse(expr):
         if t.get("t") == "IDENT":
             pending_ident.append(t.get("v"))
         elif t.get("t") == "LPAREN":
-            if len(pending_ident) == 0:
+            if not pending_ident:
                 fail("cfg parse error: '(' not following identifier.")
             fn_name = pending_ident.pop()
             frames.append({"fn": fn_name, "args": []})
         elif t.get("t") == "EQ":
-            if len(pending_ident) == 0:
+            if not pending_ident:
                 fail("cfg parse error: '=' must follow a key identifier.")
             pending_eq_key.append(pending_ident.pop())
         elif t.get("t") == "STRING":
-            if len(pending_eq_key) == 0:
+            if not pending_eq_key:
                 fail("cfg parse error: string literal not expected here.")
             key_for_eq = pending_eq_key.pop()
             frames[len(frames)-1]["args"].append({"kind": "eq", "key": key_for_eq, "value": t.get("v")})
@@ -105,7 +105,7 @@ def _cfg_parse(expr):
         elif t.get("t") == "RPAREN":
             _emit_pending(frames, pending_ident, pending_eq_key)
             closed = frames.pop()
-            if len(frames) == 0:
+            if not frames:
                 fail("cfg parse error: too many closing ')'.")
             fname = closed.get("fn")
             args_list = closed.get("args")
@@ -136,7 +136,7 @@ def _cfg_parse(expr):
     if len(root_args) != 1:
         # Allow a naked bare predicate at top-level; otherwise it's ambiguous
         # (we treat multiple top-level items as an implicit all(...), but we'll forbid it to be strict)
-        if len(root_args) == 0:
+        if not root_args:
             fail("cfg parse error: empty expression.")
         fail("cfg parse error: multiple top-level expressions; wrap with all(...)/any(...).")
 
@@ -257,7 +257,7 @@ def _cfg_eval(ast, ctx):
 
     # We must use a for-loop (no while); break when done.
     for _ in range(200000):
-        if len(todo) == 0:
+        if not todo:
             break
         instr = todo.pop()
         if instr.get("op") == "VISIT":
