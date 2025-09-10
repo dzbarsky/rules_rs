@@ -26,12 +26,13 @@ def generate_build_file(attr, cargo_toml):
     if build_script:
         build_script = build_script.removeprefix("./")
 
-    is_proc_macro = cargo_toml.get("lib", {}).get("proc-macro", False)
-    lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs").removeprefix("./")
+    lib = cargo_toml.get("lib", {})
+    is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
+    lib_path = lib.get("path", "src/lib.rs").removeprefix("./")
     edition = cargo_toml.get("package", {}).get("edition")
     if not edition or (type(edition) == "dict" and edition.get("workspace") == True):
         edition = attr.fallback_edition
-    crate_name = cargo_toml.get("lib", {}).get("name")
+    crate_name = lib.get("name")
 
     tags = [
         "crate-name=" + attr.crate,
