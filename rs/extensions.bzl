@@ -285,10 +285,10 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     if dep_name != dep_alias:
                         aliases[bazel_target] = dep_alias.replace("-", "_")
 
-                    dep_feature_resolutions.triples_compatible_with.add("*")
-                    dep_feature_resolutions.features_enabled.update(dep.get("features", []))
-                    if dep.get("default_features", True):
-                        dep_feature_resolutions.features_enabled.add("default")
+                dep_feature_resolutions.triples_compatible_with.add("*")
+                dep_feature_resolutions.features_enabled.update(dep.get("features", []))
+                if dep.get("default_features", True):
+                    dep_feature_resolutions.features_enabled.add("default")
             else:
                 # TODO(zbarsky): Lots of opportunity to save computations here.
                 match = cfg_matches_for_triples(target, platform_triples)
@@ -301,8 +301,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                         dep_feature_resolutions.platform_features_enabled[triple].update(dep.get("features", []))
                         if dep.get("default_features", True):
                             dep_feature_resolutions.platform_features_enabled[triple].add("default")
-
-                # print(dep_name, dep, target, match)
 
         # Enable any features that are implied by previously-enabled features.
         implied_features = [
@@ -340,11 +338,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                 continue
 
-            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]
-            feature_resolutions.features_enabled.add(dep_feature)
-
-            # Assume we could build top-level dep on any platform.
-            feature_resolutions.triples_compatible_with.add("*")
+            feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
 
         for feature_set in platform_features_enabled.values():
             implied_features = [
@@ -614,7 +608,11 @@ def _generate_hub_and_spokes(
             features = dep["features"]
             if dep["uses_default_features"]:
                 features.append("default")
-            feature_resolutions_by_fq_crate[_fq_crate(name, version)].features_enabled.update(features)
+
+            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
+            feature_resolutions.features_enabled.update(features)
+            # Assume we could build top-level dep on any platform.
+            feature_resolutions.triples_compatible_with.add("*")
 
     # Do some round of mutual resolution; bail when no more changes
     for i in range(10):
