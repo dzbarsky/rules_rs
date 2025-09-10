@@ -1,11 +1,12 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
-load("//rs/private:crate_repository.bzl",
+load(
+    "//rs/private:crate_repository.bzl",
+    "crate_repository",
     "create_convert_py",
     "exec_convert_py",
     "generate_build_file",
-    "crate_repository",
 )
 load("//rs/private:semver.bzl", "select_matching_version")
 
@@ -129,13 +130,15 @@ _PROC_MACROS_EXCEPTIONS = {
 def _spoke_repo(hub_name, name, version):
     return "{}__{}-{}".format(hub_name, name, version).replace("+", "-")
 
+def _platform(triple):
+    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
+
 def _select(platform_items, default = []):
     branches = []
 
     for triple, items in platform_items.items():
         if items:
-            triple = triple.replace("-musl", "-gnu")
-            branches.append(("@rules_rust//rust/platform:" + triple, sorted(items) if type(items) == "set" else items))
+            branches.append((_platform(triple), sorted(items) if type(items) == "set" else items))
 
     if not branches:
         return ""
@@ -161,6 +164,9 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
     return struct(
         features_enabled = set(),
         platform_features_enabled = {triple: set() for triple in platform_triples},
+
+        # If set, we will set `target_compatible_with`. If have "*" that means all.
+        triples_compatible_with = set(),
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
@@ -249,6 +255,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                         proc_macro_deps.add(bazel_target)
                     else:
                         platform_deps[triple].add(bazel_target)
+                        dep_feature_resolutions.triples_compatible_with.add(triple)
 
                     if dep_name != dep_alias:
                         platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
@@ -278,6 +285,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     if dep_name != dep_alias:
                         aliases[bazel_target] = dep_alias.replace("-", "_")
 
+                    dep_feature_resolutions.triples_compatible_with.add("*")
                     dep_feature_resolutions.features_enabled.update(dep.get("features", []))
                     if dep.get("default_features", True):
                         dep_feature_resolutions.features_enabled.add("default")
@@ -286,6 +294,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 match = cfg_matches_for_triples(target, platform_triples)
                 for triple in platform_triples:
                     if match[triple]:
+                        dep_feature_resolutions.triples_compatible_with.add(triple)
                         platform_deps[triple].add(bazel_target)
                         if dep_name != dep_alias:
                             platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
@@ -331,8 +340,13 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                 continue
 
-            feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
+            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)]
+            feature_resolutions.features_enabled.add(dep_feature)
 
+            # Assume we could build top-level dep on any platform.
+            feature_resolutions.triples_compatible_with.add("*")
+
+        print("hi")
         for feature_set in platform_features_enabled.values():
             implied_features = [
                 implied_feature.removeprefix("dep:")
@@ -620,6 +634,11 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
+        triples_compatible_with = feature_resolutions.triples_compatible_with
+
+        if "*" in triples_compatible_with or not triples_compatible_with:
+            triples_compatible_with = set(platform_triples)
+
         # Remove conditional deps that are present on all platforms already.
         for platform_dep_set in feature_resolutions.platform_deps.values():
             platform_dep_set.difference_update(feature_resolutions.deps)
@@ -664,6 +683,7 @@ def _generate_hub_and_spokes(
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
             crate_features = repr(sorted(feature_resolutions.features_enabled | set(crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
+            target_compatible_with = [_platform(triple) for triple in sorted(triples_compatible_with)],
         )
 
         repo_name = _spoke_repo(hub_name, name, version)
@@ -831,19 +851,19 @@ _annotation = tag_class(
         #     doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute.",
         # ),
         # "build_script_toolchains": attr.label_list(
-            # doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
+        # doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
         # ),
         # "build_script_tools": _relative_label_list(
-            # doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
+        # doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
         # ),
         # "compile_data": _relative_label_list(
-            # doc = "A list of labels to add to a crate's `rust_library::compile_data` attribute.",
+        # doc = "A list of labels to add to a crate's `rust_library::compile_data` attribute.",
         # ),
         # "compile_data_glob": attr.string_list(
-            # doc = "A list of glob patterns to add to a crate's `rust_library::compile_data` attribute.",
+        # doc = "A list of glob patterns to add to a crate's `rust_library::compile_data` attribute.",
         # ),
         # "compile_data_glob_excludes": attr.string_list(
-            # doc = "A list of glob patterns to be excllued from a crate's `rust_library::compile_data` attribute.",
+        # doc = "A list of glob patterns to be excllued from a crate's `rust_library::compile_data` attribute.",
         # ),
         "crate_features": attr.string_list(
             doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute.",

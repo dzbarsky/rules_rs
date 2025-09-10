@@ -91,6 +91,10 @@ cargo_toml_env_vars(
     tags = [
         {tags}
     ],
+    target_compatible_with = select({{
+        {target_compatible_with},
+        "//conditions:default": ["@platforms//:incompatible"],
+    }}),
     version = {version}
 )
 """
@@ -129,6 +133,10 @@ cargo_build_script(
         allow_empty = True,
         include = ["**/*.rs"],
     ),
+    target_compatible_with = select({{
+        {target_compatible_with},
+        "//conditions:default": ["@platforms//:incompatible"],
+    }}),
     tags = [
         {tags}
     ],
@@ -160,6 +168,7 @@ cargo_build_script(
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         build_script = repr(build_script),
         compile_data = compile_data,
+        target_compatible_with = ",\n        ".join(['"%s": []' % t for t in attr.target_compatible_with]),
     )
 
 def _crate_repository_impl(rctx):
@@ -209,5 +218,6 @@ crate_repository = repository_rule(
         "conditional_aliases": attr.string(default = ""),
         "crate_features": attr.string(mandatory = True),
         "conditional_crate_features": attr.string(default = ""),
+        "target_compatible_with": attr.string_list(mandatory = True),
     },
 )
