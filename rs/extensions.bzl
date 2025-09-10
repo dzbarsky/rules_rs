@@ -12,6 +12,7 @@ _PROC_MACROS = set([
     "asn1-rs-derive",
     "asn1-rs-impl",
     "async-attributes",
+    "curve25519-dalek-derive",
     "async-generic",
     "async-recursion",
     "async-stream-impl",
@@ -120,7 +121,10 @@ _PROC_MACROS_EXCEPTIONS = {
 }
 
 def _sanitize_crate(name):
-    return name.replace("+", "_")
+    return name.replace("+", "-")
+
+def _spoke_repo(hub_name, name, version):
+    return _sanitize_crate("{}__{}-{}".format(hub_name, name, version))
 
 def _select(platform_items, default = []):
     branches = []
@@ -148,7 +152,7 @@ def _add_to_dict(d, k, v):
     existing.extend(v)
 
 def _fq_crate(name, version):
-    return _sanitize_crate(name + "_" + version)
+    return _sanitize_crate(name + "-" + version)
 
 def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples):
     return struct(
@@ -227,7 +231,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # print("NOT FOUND", dep)
                 continue
 
-            bazel_target = _sanitize_crate("@{}//:{}_{}".format(hub_name, dep_name, resolved_version))
+            bazel_target = "@{}//:{}-{}".format(hub_name, dep_name, resolved_version)
 
             proc_macro = dep_name in _PROC_MACROS and resolved_version not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
             dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
@@ -398,7 +402,7 @@ def _generate_hub_and_spokes(
     mctx.watch(cargo_lock_path)
     cargo_lock = _exec_convert_py(mctx, cargo_lock_path)
 
-    existing_facts = getattr(mctx, "facts") or {}
+    existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
 
     # Ignore workspace members
@@ -659,7 +663,7 @@ def _generate_hub_and_spokes(
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
         )
 
-        repo_name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version))
+        repo_name = _spoke_repo(hub_name, name, version)
 
         if checksum:
             _crate_repository(
@@ -687,28 +691,27 @@ def _generate_hub_and_spokes(
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
-            qualified_name = _fq_crate(name, version)
-            spoke_name = "@{}__{}//:{}".format(hub_name, qualified_name, name)
             hub_contents.append("""
 alias(
-    name = "{}",
-    actual = "{}",
+    name = "{name}-{version}",
+    actual = "@{spoke_repo}//:{name}",
     visibility = ["//visibility:public"],
 )""".format(
-                qualified_name,
-                spoke_name,
+                name = name,
+                version = version,
+                spoke_repo = _spoke_repo(hub_name, name, version),
             ))
 
-        if len(versions) == 1:
-            hub_contents.append("""
+        hub_contents.append("""
 alias(
-    name = "{}",
-    actual = ":{}",
+    name = "{name}",
+    actual = ":{name}-{version}",
     visibility = ["//visibility:public"],
 )""".format(
-                name,
-                qualified_name,
-            ))
+            name = name,
+            # TODO(zbarsky): Select max version?
+            version = versions[-1],
+        ))
 
     _hub_repo(
         name = hub_name,
