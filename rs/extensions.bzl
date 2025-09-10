@@ -44,6 +44,7 @@ _PROC_MACROS = set([
     "enumflags2_derive",
     "equator-macro",
     "err-derive",
+    "failure_derive",
     "fix-hidden-lifetime-bug-proc_macros",
     "foreign-types-macros",
     "futures-macro",
@@ -523,7 +524,7 @@ def _generate_hub_and_spokes(
         else:
             cargo_toml_json = _exec_convert_py(mctx, "{}_{}.Cargo.toml".format(name, version))
 
-            if cargo_toml_json["package"]["name"] != name:
+            if cargo_toml_json.get("package", {}).get("name") != name:
                 if name in cargo_toml_json["workspace"]["members"]:
                     # TODO(zbarsky): Is this always like this?
                     package["strip_prefix"] = name
@@ -949,16 +950,19 @@ def _crate_repository_impl(rctx):
     cargo_toml = _exec_convert_py(rctx, "Cargo.toml")
     rctx.delete("convert.py")
 
-    build_script = cargo_toml["package"].get("build")
+    build_script = cargo_toml.get("package", {}).get("build")
     if not build_script and rctx.path("build.rs").exists:
+        if "package" not in cargo_toml:
+            cargo_toml["package"] = {}
         cargo_toml["package"]["build"] = "build.rs"
 
-    build_file_content = _generate_build_file(rctx.attr, cargo_toml)
-    rctx.file("BUILD.bazel", build_file_content)
+    rctx.file("BUILD.bazel", _generate_build_file(rctx.attr, cargo_toml))
+
+    return rctx.repo_metadata(reproducible = True)
 
 def _generate_build_file(attr, cargo_toml):
     # TODO(zbarsky): Handle implicit build.rs case for git repo??
-    build_script = cargo_toml["package"].get("build")
+    build_script = cargo_toml.get("package", {}).get("build")
     if build_script:
         build_script = build_script.removeprefix("./")
 
