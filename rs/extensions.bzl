@@ -340,7 +340,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
             feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
 
-        for feature_set in platform_features_enabled.values():
+        for triple, feature_set in platform_features_enabled.items():
             implied_features = [
                 implied_feature.removeprefix("dep:")
                 for enabled_feature in feature_set
@@ -353,7 +353,30 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 if "/" not in f
             ])
 
-        # TODO(zbarsky): do we need dep features for platform selects?
+            dep_features = [feature for feature in implied_features if "/" in feature]
+            for feature in dep_features:
+                dep_name, dep_feature = feature.split("/")
+
+                if dep_name.endswith("?"):
+                    dep_name = dep_name[:-1]
+                else:
+                    # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
+                    feature_set.add(dep_name)
+
+                dep_version = possible_dep_version_by_name.get(dep_name)
+                if not dep_version:
+                    # Maybe it's an alias?
+                    for dep in feature_resolutions.possible_deps:
+                        if dep.get("name") == dep_name and "package" in dep:
+                            dep_name = dep["package"]
+                            break
+                    dep_version = possible_dep_version_by_name.get(dep_name)
+
+                if not dep_version:
+                    print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
+                    continue
+
+                feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].platform_features_enabled[triple].add(dep_feature)
 
     final_count = _count(feature_resolutions_by_fq_crate)
     return final_count > initial_count
