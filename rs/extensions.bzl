@@ -1,4 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
 load("//rs/private:semver.bzl", "select_matching_version")
 
@@ -363,14 +364,6 @@ def _git_url_to_cargo_toml(url):
     repo_path, sha = _parse_git_url(url)
     return "https://raw.githubusercontent.com/{}/{}/Cargo.toml".format(repo_path, sha)
 
-def _git_url_to_archive(url):
-    repo_path, sha = _parse_git_url(url)
-
-    repo = repo_path.split("/")[1]
-    strip_prefix = repo + "-" + sha
-
-    return url, strip_prefix
-
 def _sharded_path(crate):
     crate = crate.lower()
 
@@ -473,6 +466,7 @@ def _generate_hub_and_spokes(
     for package in packages:
         name = package["name"]
         version = package["version"]
+        source = package["source"]
 
         possible_dep_version_by_name = {}
         for dep in package.get("dependencies", []):
@@ -483,7 +477,7 @@ def _generate_hub_and_spokes(
                 dep, resolved_version = dep.split(" ")
             possible_dep_version_by_name[dep] = resolved_version
 
-        if package["source"] == "registry+https://github.com/rust-lang/crates.io-index":
+        if source == "registry+https://github.com/rust-lang/crates.io-index":
             key = name + "_" + version
             fact = facts.get(key)
             if fact:
@@ -528,6 +522,25 @@ def _generate_hub_and_spokes(
             possible_deps = fact["dependencies"]
         else:
             cargo_toml_json = _exec_convert_py(mctx, "{}_{}.Cargo.toml".format(name, version))
+
+            if cargo_toml_json["package"]["name"] != name:
+                if name in cargo_toml_json["workspace"]["members"]:
+                    # TODO(zbarsky): Is this always like this?
+                    package["strip_prefix"] = name
+
+                    download_path = name + ".Cargo.toml"
+                    url = _git_url_to_cargo_toml(source).replace("Cargo.toml", name + "/Cargo.toml")
+                    result = mctx.download(
+                        url,
+                        download_path,
+                        canonical_id = get_default_canonical_id(mctx, urls = [url]),
+                    )
+                    if not result.success:
+                        fail("Could not download")
+                    cargo_toml_json = _exec_convert_py(mctx, download_path)
+
+            package["cargo_toml_json"] = cargo_toml_json
+
             possible_features = cargo_toml_json.get("features", {})
 
             possible_deps = []
@@ -544,7 +557,21 @@ def _generate_hub_and_spokes(
                         "features": spec.get("features", []),
                     })
 
-            # TODO(zbarsky): build deps?
+            for dep, spec in cargo_toml_json.get("build-dependencies", {}).items():
+                if type(spec) == "string":
+                    possible_deps.append({
+                        "name": dep,
+                        "kind": "build",
+                    })
+                else:
+                    possible_deps.append({
+                        "name": dep,
+                        "kind": "build",
+                        "optional": spec.get("optional", False),
+                        "default_features": spec.get("default_features", True),
+                        "features": spec.get("features", []),
+                    })
+
             if not possible_deps:
                 print(name, version, package["source"])
 
@@ -593,12 +620,6 @@ def _generate_hub_and_spokes(
         conditional_aliases = _select(feature_resolutions.platform_aliases, default = {})
         conditional_crate_features = _select(feature_resolutions.platform_features_enabled)
 
-        if checksum:
-            url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version)
-            strip_prefix = "{}-{}".format(name, version)
-        else:
-            url, strip_prefix = _git_url_to_archive(package["source"])
-
         annotation = annotations.get(name)
         if annotation:
             build_script_data = annotation.build_script_data
@@ -617,12 +638,9 @@ def _generate_hub_and_spokes(
             crate_features = []
             rustc_flags = []
 
-        _crate_repository(
-            name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version)),
+        kwargs = dict(
             crate = name,
             version = version,
-            url = url,
-            strip_prefix = strip_prefix,
             checksum = checksum,
             build_deps = sorted(feature_resolutions.build_deps | set(deps)),
             build_script_data = build_script_data,
@@ -639,6 +657,29 @@ def _generate_hub_and_spokes(
             crate_features = repr(sorted(feature_resolutions.features_enabled | set(crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
         )
+
+        repo_name = _sanitize_crate("{}__{}_{}".format(hub_name, name, version))
+
+        if checksum:
+            _crate_repository(
+                name = repo_name,
+                url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version),
+                strip_prefix = "{}-{}".format(name, version),
+                **kwargs
+            )
+        else:
+            build_file_content = _generate_build_file(struct(**kwargs), package["cargo_toml_json"])
+
+            repo_path, sha = _parse_git_url(package["source"])
+
+            new_git_repository(
+                name = repo_name,
+                init_submodules = True,
+                build_file_content = build_file_content,
+                strip_prefix = package.get("strip_prefix"),
+                commit = sha,
+                remote = "https://github.com/%s.git" % repo_path,
+            )
 
     mctx.report_progress("Initializing hub")
 
@@ -896,37 +937,38 @@ crate = module_extension(
 def _crate_repository_impl(rctx):
     _create_convert_py(rctx)
 
-    crate = rctx.attr.crate
-    version = rctx.attr.version
-    checksum = rctx.attr.checksum
-    deps = rctx.attr.deps
-
     # Compute the URL
     rctx.download_and_extract(
         rctx.attr.url,
         type = "tar.gz",
         canonical_id = get_default_canonical_id(rctx, urls = [rctx.attr.url]),
         strip_prefix = rctx.attr.strip_prefix,
-        sha256 = checksum,
+        sha256 = rctx.attr.checksum,
     )
 
     cargo_toml = _exec_convert_py(rctx, "Cargo.toml")
+    rctx.delete("convert.py")
 
-    build_script = cargo_toml.get("package", {}).get("build")
-    if rctx.path("build.rs").exists:
-        build_script = "build.rs"
+    build_script = cargo_toml["package"].get("build")
+    if not build_script and rctx.path("build.rs").exists:
+        cargo_toml["package"]["build"] = "build.rs"
+
+    build_file_content = _generate_build_file(rctx.attr, cargo_toml)
+    rctx.file("BUILD.bazel", build_file_content)
+
+def _generate_build_file(attr, cargo_toml):
+    # TODO(zbarsky): Handle implicit build.rs case for git repo??
+    build_script = cargo_toml["package"].get("build")
+    if build_script:
+        build_script = build_script.removeprefix("./")
 
     is_proc_macro = cargo_toml.get("lib", {}).get("proc-macro", False)
-    lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs")
+    lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs").removeprefix("./")
     edition = cargo_toml.get("package", {}).get("edition", "2015")
     crate_name = cargo_toml.get("lib", {}).get("name")
 
-    rctx.delete("convert.py")
-
-    # Create a BUILD file with a deps attribute
-
     tags = [
-        "crate-name=" + crate,
+        "crate-name=" + attr.crate,
         "manual",
         "noclippy",
         "norustfmt",
@@ -989,7 +1031,8 @@ cargo_toml_env_vars(
 )
 """
 
-    if crate != "libduckdb-sys" and build_script:
+    deps = attr.deps
+    if attr.crate != "libduckdb-sys" and build_script:
         deps = [":_bs"] + deps
         build_content += """
 
@@ -1029,31 +1072,31 @@ cargo_build_script(
     visibility = ["//visibility:private"],
 )"""
 
-    rctx.file("BUILD.bazel", build_content.format(
+    return build_content.format(
         library_rule_type = "rust_proc_macro" if is_proc_macro else "rust_library",
-        crate = repr(crate),
+        crate = repr(attr.crate),
         crate_name = repr(crate_name),
-        version = repr(version),
+        version = repr(attr.version),
         edition = repr(edition),
-        crate_features = rctx.attr.crate_features,
-        conditional_crate_features = rctx.attr.conditional_crate_features,
+        crate_features = attr.crate_features,
+        conditional_crate_features = attr.conditional_crate_features,
         lib_path = repr(lib_path),
-        proc_macro_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_deps]),
-        proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.proc_macro_build_deps]),
-        build_deps = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_deps]),
-        build_script_data = ",\n        ".join(['"%s"' % d for d in rctx.attr.build_script_data]),
-        build_script_env = repr(rctx.attr.build_script_env),
-        build_script_toolchains = repr([str(t) for t in rctx.attr.build_script_toolchains]),
-        rustc_flags = repr(rctx.attr.rustc_flags or []),
+        proc_macro_deps = ",\n        ".join(['"%s"' % d for d in attr.proc_macro_deps]),
+        proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in attr.proc_macro_build_deps]),
+        build_deps = ",\n        ".join(['"%s"' % d for d in attr.build_deps]),
+        build_script_data = ",\n        ".join(['"%s"' % d for d in attr.build_script_data]),
+        build_script_env = repr(attr.build_script_env),
+        build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
+        rustc_flags = repr(attr.rustc_flags or []),
         deps = ",\n        ".join(['"%s"' % d for d in deps]),
-        data = ",\n        ".join(['"%s"' % d for d in rctx.attr.data]),
-        conditional_deps = rctx.attr.conditional_deps,
-        aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in rctx.attr.aliases.items()]),
-        conditional_aliases = rctx.attr.conditional_aliases,
+        data = ",\n        ".join(['"%s"' % d for d in attr.data]),
+        conditional_deps = attr.conditional_deps,
+        aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
+        conditional_aliases = attr.conditional_aliases,
         tags = ",\n        ".join(['"%s"' % t for t in tags]),
         build_script = repr(build_script),
         compile_data = compile_data,
-    ))
+    )
 
 _crate_repository = repository_rule(
     implementation = _crate_repository_impl,
