@@ -346,7 +346,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             # Assume we could build top-level dep on any platform.
             feature_resolutions.triples_compatible_with.add("*")
 
-        print("hi")
         for feature_set in platform_features_enabled.values():
             implied_features = [
                 implied_feature.removeprefix("dep:")
@@ -850,9 +849,9 @@ _annotation = tag_class(
         # "build_script_rustc_env": attr.string_dict(
         #     doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute.",
         # ),
-        # "build_script_toolchains": attr.label_list(
-        # doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
-        # ),
+        "build_script_toolchains": attr.label_list(
+            doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
+        ),
         # "build_script_tools": _relative_label_list(
         # doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
         # ),
