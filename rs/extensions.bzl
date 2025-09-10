@@ -282,8 +282,9 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     proc_macro_deps.add(bazel_target)
                 else:
                     deps.add(bazel_target)
-                    if dep_name != dep_alias:
-                        aliases[bazel_target] = dep_alias.replace("-", "_")
+
+                if dep_name != dep_alias:
+                    aliases[bazel_target] = dep_alias.replace("-", "_")
 
                 dep_feature_resolutions.triples_compatible_with.add("*")
                 dep_feature_resolutions.features_enabled.update(dep.get("features", []))
@@ -562,12 +563,21 @@ def _generate_hub_and_spokes(
             cargo_toml_json = exec_convert_py(mctx, "{}_{}.Cargo.toml".format(name, version))
 
             if cargo_toml_json.get("package", {}).get("name") != name:
+                strip_prefix = None
                 if name in cargo_toml_json["workspace"]["members"]:
-                    # TODO(zbarsky): Is this always like this?
-                    package["strip_prefix"] = name
+                    strip_prefix = name
+                else:
+                    # TODO(zbarsky): more cases to handle here?
+                    for dep in cargo_toml_json["workspace"]["dependencies"].values():
+                        if type(dep) == "dict" and dep.get("package") == name:
+                            strip_prefix = dep["path"]
+                            break
 
-                    download_path = name + ".Cargo.toml"
-                    url = _git_url_to_cargo_toml(source).replace("Cargo.toml", name + "/Cargo.toml")
+                if strip_prefix:
+                    package["edition"] = cargo_toml_json["workspace"].get("edition")
+                    package["strip_prefix"] = strip_prefix
+                    download_path = strip_prefix + ".Cargo.toml"
+                    url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
                     result = mctx.download(
                         url,
                         download_path,
@@ -704,6 +714,7 @@ def _generate_hub_and_spokes(
             crate_features = repr(sorted(feature_resolutions.features_enabled | set(crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
             target_compatible_with = [_platform(triple) for triple in sorted(triples_compatible_with)],
+            fallback_edition = package.get("edition"),
         )
 
         repo_name = _spoke_repo(hub_name, name, version)

@@ -28,7 +28,9 @@ def generate_build_file(attr, cargo_toml):
 
     is_proc_macro = cargo_toml.get("lib", {}).get("proc-macro", False)
     lib_path = cargo_toml.get("lib", {}).get("path", "src/lib.rs").removeprefix("./")
-    edition = cargo_toml.get("package", {}).get("edition", "2015")
+    edition = cargo_toml.get("package", {}).get("edition")
+    if not edition or (type(edition) == "dict" and edition.get("workspace") == True):
+        edition = attr.fallback_edition
     crate_name = cargo_toml.get("lib", {}).get("name")
 
     tags = [
@@ -214,10 +216,11 @@ crate_repository = repository_rule(
         "data": attr.label_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
-        "aliases": attr.label_keyed_string_dict(),
+        "aliases": attr.string_dict(),
         "conditional_aliases": attr.string(default = ""),
         "crate_features": attr.string(mandatory = True),
         "conditional_crate_features": attr.string(default = ""),
         "target_compatible_with": attr.string_list(mandatory = True),
+        "fallback_edition": attr.string(default = "2015"),
     },
 )
