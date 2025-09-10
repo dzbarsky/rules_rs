@@ -123,7 +123,6 @@ _PROC_MACROS = set([
 
 _PROC_MACROS_EXCEPTIONS = {
     "derive_more": ["2.0.1"],
-    "prost-derive": ["0.10.1"],
     "time-macros": ["0.1.1"],
 }
 

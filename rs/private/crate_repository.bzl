@@ -22,17 +22,21 @@ def exec_convert_py(ctx, file):
 
 def generate_build_file(attr, cargo_toml):
     # TODO(zbarsky): Handle implicit build.rs case for git repo??
-    build_script = cargo_toml.get("package", {}).get("build")
+    package = cargo_toml.get("package", {})
+    build_script = package.get("build")
     if build_script:
         build_script = build_script.removeprefix("./")
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
     lib_path = lib.get("path", "src/lib.rs").removeprefix("./")
-    edition = cargo_toml.get("package", {}).get("edition")
+
+    edition = package.get("edition")
     if not edition or (type(edition) == "dict" and edition.get("workspace") == True):
         edition = attr.fallback_edition
+
     crate_name = lib.get("name")
+    links = package.get("links")
 
     tags = [
         "crate-name=" + attr.crate,
@@ -113,6 +117,7 @@ cargo_build_script(
     crate_features = {crate_features}{conditional_crate_features},
     crate_name = "build_script_build",
     crate_root = {build_script},
+    links = {links},
     data = {compile_data} + [
         {build_script_data}
     ],
@@ -153,6 +158,7 @@ cargo_build_script(
         crate_name = repr(crate_name),
         version = repr(attr.version),
         edition = repr(edition),
+        links = repr(links),
         crate_features = attr.crate_features,
         conditional_crate_features = attr.conditional_crate_features,
         lib_path = repr(lib_path),
