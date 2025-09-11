@@ -76,7 +76,7 @@ def _cfg_tokenize(expr):
 # Parser (non-recursive; stack of frames)
 ############################################
 
-def _cfg_parse(expr):
+def cfg_parse(expr):
     # Accept "cfg(...)" wrapper or a bare expression.
     tokens = _cfg_tokenize(expr)
     frames = [{"fn": "__ROOT__", "args": []}]
@@ -296,13 +296,14 @@ def _cfg_eval(ast, ctx):
     return results[0]
 
 def cfg_matches(expr, triple, features=[], target_features=[]):
-    ast = _cfg_parse(expr)
+    ast = cfg_parse(expr)
     ctx = triple_to_cfg_attrs(triple, features, target_features)
     return _cfg_eval(ast, ctx)
 
-def cfg_matches_for_triples(expr, triples, features=[], target_features=[]):
-    ast = _cfg_parse(expr)
+def cfg_matches_expr_for_triples(expr, triples, features=[], target_features=[]):
+    return cfg_matches_ast_for_triples(cfg_parse(expr), triples, features, target_features)
 
+def cfg_matches_ast_for_triples(ast, triples, features=[], target_features=[]):
     return {
         triple: _cfg_eval(ast, triple_to_cfg_attrs(triple, features, target_features))
         for triple in triples

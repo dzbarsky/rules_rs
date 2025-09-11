@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
-load("//rs/private:cfg_parser.bzl", "cfg_matches_for_triples")
+load("//rs/private:cfg_parser.bzl", "cfg_matches_ast_for_triples", "cfg_parse")
 load(
     "//rs/private:crate_repository.bzl",
     "crate_repository",
@@ -159,7 +159,7 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return name + "-" + version
 
-def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples):
+def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples):
     return struct(
         features_enabled = set(),
         platform_features_enabled = {triple: set() for triple in platform_triples},
@@ -178,7 +178,7 @@ def _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possib
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
         possible_deps = possible_deps,
-        possible_dep_version_by_name = possible_dep_version_by_name,
+        possible_dep_fq_crate_by_name = possible_dep_fq_crate_by_name,
         possible_features = possible_features,
     )
 
@@ -204,10 +204,6 @@ def _count(feature_resolutions_by_fq_crate):
     return n
 
 def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples):
-    # Resolution process always enables new crates/features so we can just count total enabled
-    # instead of being careful about change tracking.
-    initial_count = _count(feature_resolutions_by_fq_crate)
-
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
         platform_features_enabled = feature_resolutions.platform_features_enabled
@@ -222,7 +218,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
         proc_macro_build_deps = feature_resolutions.proc_macro_build_deps
         proc_macro_deps = feature_resolutions.proc_macro_deps
 
-        possible_dep_version_by_name = feature_resolutions.possible_dep_version_by_name
+        possible_dep_fq_crate_by_name = feature_resolutions.possible_dep_fq_crate_by_name
         possible_features = feature_resolutions.possible_features
 
         # Propagate features across currently enabled dependencies.
@@ -234,15 +230,15 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_name = dep["name"]
                 dep_alias = dep_name
 
-            resolved_version = possible_dep_version_by_name.get(dep_name)
-            if not resolved_version:
+            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+            if not dep_fq:
                 # print("NOT FOUND", dep)
                 continue
 
-            bazel_target = "@{}//:{}-{}".format(hub_name, dep_name, resolved_version)
+            bazel_target = "@{}//:{}".format(hub_name, dep_fq)
 
-            proc_macro = dep_name in _PROC_MACROS and resolved_version not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
-            dep_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(dep_name, resolved_version)]
+            proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
+            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
             if dep.get("optional") and dep_alias not in features_enabled:
                 for triple, feature_set in platform_features_enabled.items():
@@ -291,7 +287,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     dep_feature_resolutions.features_enabled.add("default")
             else:
                 # TODO(zbarsky): Lots of opportunity to save computations here.
-                match = cfg_matches_for_triples(target, platform_triples)
+                match = cfg_matches_ast_for_triples(target, platform_triples)
                 for triple in platform_triples:
                     if match[triple]:
                         dep_feature_resolutions.triples_compatible_with.add(triple)
@@ -325,20 +321,20 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
                 features_enabled.add(dep_name)
 
-            dep_version = possible_dep_version_by_name.get(dep_name)
-            if not dep_version:
+            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+            if not dep_fq:
                 # Maybe it's an alias?
                 for dep in feature_resolutions.possible_deps:
                     if dep.get("name") == dep_name and "package" in dep:
                         dep_name = dep["package"]
                         break
-                dep_version = possible_dep_version_by_name.get(dep_name)
+                dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
 
-            if not dep_version:
+            if not dep_fq:
                 print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                 continue
 
-            feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].features_enabled.add(dep_feature)
+            feature_resolutions_by_fq_crate[dep_fq].features_enabled.add(dep_feature)
 
         for triple, feature_set in platform_features_enabled.items():
             implied_features = [
@@ -363,23 +359,20 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
                     feature_set.add(dep_name)
 
-                dep_version = possible_dep_version_by_name.get(dep_name)
-                if not dep_version:
+                dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+                if not dep_fq:
                     # Maybe it's an alias?
                     for dep in feature_resolutions.possible_deps:
                         if dep.get("name") == dep_name and "package" in dep:
                             dep_name = dep["package"]
                             break
-                    dep_version = possible_dep_version_by_name.get(dep_name)
+                    dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
 
-                if not dep_version:
+                if not dep_fq:
                     print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                     continue
 
-                feature_resolutions_by_fq_crate[_fq_crate(dep_name, dep_version)].platform_features_enabled[triple].add(dep_feature)
-
-    final_count = _count(feature_resolutions_by_fq_crate)
-    return final_count > initial_count
+                feature_resolutions_by_fq_crate[dep_fq].platform_features_enabled[triple].add(dep_feature)
 
 def _parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
@@ -506,14 +499,14 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        possible_dep_version_by_name = {}
+        possible_dep_fq_crate_by_name = {}
         for dep in package.get("dependencies", []):
             if " " not in dep:
                 # Only one version
                 resolved_version = versions_by_name[dep][0]
             else:
                 dep, resolved_version = dep.split(" ")
-            possible_dep_version_by_name[dep] = resolved_version
+            possible_dep_fq_crate_by_name[dep] = _fq_crate(dep, resolved_version)
 
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             key = name + "_" + version
@@ -622,8 +615,13 @@ def _generate_hub_and_spokes(
             if not possible_deps:
                 print(name, version, package["source"])
 
+        for dep in possible_deps:
+            target = dep.get("target")
+            if target:
+                dep["target"] = cfg_parse(target)
+
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
-            _new_feature_resolutions(possible_deps, possible_dep_version_by_name, possible_features, platform_triples)
+            _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
         )
 
     # Set initial set of features from Cargo.tomls
@@ -647,12 +645,18 @@ def _generate_hub_and_spokes(
             feature_resolutions.triples_compatible_with.add("*")
 
     # Do some round of mutual resolution; bail when no more changes
+    # Resolution process always enables new crates/features so we can just count total enabled
+    # instead of being careful about change tracking.
+    initial_count = 0
     for i in range(10):
         mctx.report_progress("Running round {} of dependency/feature resolution".format(i))
 
-        had_change = _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples)
-        if not had_change:
+        _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples)
+        count = _count(feature_resolutions_by_fq_crate)
+        if count == initial_count:
             break
+
+        initial_count = count
 
     mctx.report_progress("Initializing spokes")
 

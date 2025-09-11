@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_for_triples")
+load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_triples")
 
 def _cfg(expr):
     return "cfg(%s)" % expr
@@ -47,13 +47,13 @@ def _cfg_parser_smoke_test_impl(ctx):
 
     triples = [mac, linux_gnu, linux_musl, win]
 
-    results = cfg_matches_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
+    results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
     asserts.false(env, results[mac])
     asserts.true(env, results[linux_gnu])
     asserts.true(env, results[linux_musl])
     asserts.false(env, results[win])
 
-    results = cfg_matches_for_triples(
+    results = cfg_matches_expr_for_triples(
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
         triples)
     asserts.true(env, results[mac])
