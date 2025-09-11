@@ -82,6 +82,9 @@ cargo_toml_env_vars(
     deps = [
         {deps}
     ]{conditional_deps},
+    data = [
+        {data}
+    ],
     proc_macro_deps = [
         {proc_macro_deps}
     ],
