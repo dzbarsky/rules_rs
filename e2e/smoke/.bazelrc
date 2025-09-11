@@ -1,1 +1,2 @@
 common --repo_contents_cache=~/repo_content_cache
+common --experimental_repository_ctx_execute_wasm

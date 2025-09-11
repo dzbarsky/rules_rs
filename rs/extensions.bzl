@@ -4,9 +4,8 @@ load("//rs/private:cfg_parser.bzl", "cfg_matches_ast_for_triples", "cfg_parse")
 load(
     "//rs/private:crate_repository.bzl",
     "crate_repository",
-    "create_convert_py",
-    "exec_convert_py",
     "generate_build_file",
+    "run_toml2json",
 )
 load("//rs/private:semver.bzl", "select_matching_version")
 
@@ -413,6 +412,7 @@ def _sharded_path(crate):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
+        toml2json,
         annotations,
         cargo_lock_path,
         platform_triples):
@@ -422,11 +422,12 @@ def _generate_hub_and_spokes(
         mctx (module_ctx): The module context object.
         annotations (dict): Annotation tags to apply.
         hub_name (string): name
+        toml2json (wasm module):
         cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
     """
     mctx.watch(cargo_lock_path)
-    cargo_lock = exec_convert_py(mctx, cargo_lock_path)
+    cargo_lock = run_toml2json(mctx, toml2json, cargo_lock_path)
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
@@ -552,7 +553,7 @@ def _generate_hub_and_spokes(
             possible_features = fact["features"]
             possible_deps = fact["dependencies"]
         else:
-            cargo_toml_json = exec_convert_py(mctx, "{}_{}.Cargo.toml".format(name, version))
+            cargo_toml_json = run_toml2json(mctx, toml2json, "{}_{}.Cargo.toml".format(name, version))
 
             if cargo_toml_json.get("package", {}).get("name") != name:
                 strip_prefix = None
@@ -577,7 +578,7 @@ def _generate_hub_and_spokes(
                     )
                     if not result.success:
                         fail("Could not download")
-                    cargo_toml_json = exec_convert_py(mctx, download_path)
+                    cargo_toml_json = run_toml2json(mctx, toml2json, download_path)
 
             package["cargo_toml_json"] = cargo_toml_json
 
@@ -641,6 +642,7 @@ def _generate_hub_and_spokes(
 
             feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
             feature_resolutions.features_enabled.update(features)
+
             # Assume we could build top-level dep on any platform.
             feature_resolutions.triples_compatible_with.add("*")
 
@@ -780,7 +782,7 @@ alias(
     return facts
 
 def _crate_impl(mctx):
-    create_convert_py(mctx)
+    toml2json = None
 
     facts = {}
     direct_deps = []
@@ -797,7 +799,10 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
-            facts.update(_generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples))
+            if not toml2json:
+                toml2json = mctx.load_wasm(cfg._wasm2json)
+
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -824,6 +829,8 @@ _from_cargo = tag_class(
         "platform_triples": attr.string_list(
             mandatory = True,
         ),
+    } | {
+        "_wasm2json": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
     },
 )
 

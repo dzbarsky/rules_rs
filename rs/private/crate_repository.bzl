@@ -1,24 +1,12 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 
-def create_convert_py(ctx):
-    ctx.file("convert.py", """
-import sys
-import tomllib
-import json
-
-with open(sys.argv[1], "rb") as f:
-    data = tomllib.load(f)
-
-print(json.dumps(data, indent=2))
-""")
-
-def exec_convert_py(ctx, file):
-    # TODO(zbarsky): This relies on host python 3.11+, we will need a better solution.
-    result = ctx.execute(["python", "convert.py", file])
+def run_toml2json(ctx, toml2json, toml_file):
+    data = ctx.read(toml_file)
+    result = ctx.execute_wasm(toml2json, "toml2json", input=data)
     if result.return_code != 0:
-        fail(result.stdout + "\n" + result.stderr)
+        fail(result.output)
 
-    return json.decode(result.stdout)
+    return json.decode(result.output)
 
 def generate_build_file(attr, cargo_toml):
     # TODO(zbarsky): Handle implicit build.rs case for git repo??
@@ -184,8 +172,6 @@ cargo_build_script(
     )
 
 def _crate_repository_impl(rctx):
-    create_convert_py(rctx)
-
     # Compute the URL
     rctx.download_and_extract(
         rctx.attr.url,
@@ -195,8 +181,8 @@ def _crate_repository_impl(rctx):
         sha256 = rctx.attr.checksum,
     )
 
-    cargo_toml = exec_convert_py(rctx, "Cargo.toml")
-    rctx.delete("convert.py")
+    toml2json = rctx.load_wasm(rctx.attr._wasm2json)
+    cargo_toml = run_toml2json(rctx, toml2json, "Cargo.toml")
 
     build_script = cargo_toml.get("package", {}).get("build")
     if not build_script and rctx.path("build.rs").exists:
@@ -232,5 +218,6 @@ crate_repository = repository_rule(
         "conditional_crate_features": attr.string(default = ""),
         "target_compatible_with": attr.string_list(mandatory = True),
         "fallback_edition": attr.string(default = "2015"),
+        "_wasm2json": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
     },
 )
