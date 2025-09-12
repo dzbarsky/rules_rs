@@ -475,9 +475,11 @@ def _generate_hub_and_spokes(
         else:
             fail("Unknown source " + source)
 
+    # TODO(zbarsky): Not sure why we need this weird hack to get `/bin/` into the path...
+    cargo = mctx.path(Label("@rs_rust_host_tools//:cargo"))
+    cargo = cargo.dirname.get_child("bin/cargo")
     result = mctx.execute(
-        # TODO(zbarsky): Use hermetic cargo...
-        ["cargo", "metadata", "--no-deps", "--format-version=1", "--quiet"],
+        [cargo, "metadata", "--no-deps", "--format-version=1", "--quiet"],
         working_directory = str(mctx.path(cargo_lock_path).dirname),
     )
     if result.return_code != 0:
