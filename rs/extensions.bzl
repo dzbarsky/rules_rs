@@ -244,9 +244,16 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # Drop dev deps
                 continue
 
+            target = dep.get("target")
+            if target:
+                # TODO(zbarsky): Lots of opportunity to save computations here.
+                match = cfg_matches_ast_for_triples(target, platform_triples)
+            else:
+                match = {triple: True for triple in platform_triples}
+
             if dep.get("optional") and dep_alias not in features_enabled:
                 for triple, feature_set in platform_features_enabled.items():
-                    if dep_alias not in feature_set:
+                    if dep_alias not in feature_set or not match[triple]:
                         continue
 
                     # TODO(zbarsky): platform-specific build deps?
@@ -278,7 +285,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 else:
                     build_deps.add(bazel_target)
 
-            target = dep.get("target")
             if not target:
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
@@ -293,8 +299,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 if dep.get("default_features", True):
                     dep_feature_resolutions.features_enabled.add("default")
             else:
-                # TODO(zbarsky): Lots of opportunity to save computations here.
-                match = cfg_matches_ast_for_triples(target, platform_triples)
                 for triple in platform_triples:
                     if match[triple]:
                         dep_feature_resolutions.triples_compatible_with.add(triple)
