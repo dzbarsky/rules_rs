@@ -104,7 +104,19 @@ cargo_toml_env_vars(
 
 cargo_build_script(
     name = "_bs",
-    compile_data = {compile_data},
+    compile_data = glob(
+        include = ["**"],
+        allow_empty = True,
+        exclude = [
+            "**/* *",
+            "**/*.rs",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
     crate_features = {crate_features}{conditional_crate_features},
     crate_name = "build_script_build",
     crate_root = {build_script},
@@ -115,6 +127,7 @@ cargo_build_script(
     deps = [
         {build_deps}
     ],
+    link_deps = {link_deps},
     build_script_env = {build_script_env},
     toolchains = {build_script_toolchains},
     proc_macro_deps = [
@@ -150,6 +163,7 @@ cargo_build_script(
         version = repr(attr.version),
         edition = repr(edition),
         links = repr(links),
+        link_deps = repr(attr.link_deps),
         crate_features = attr.crate_features,
         conditional_crate_features = attr.conditional_crate_features,
         lib_path = repr(lib_path),
@@ -202,6 +216,7 @@ crate_repository = repository_rule(
         "url": attr.string(mandatory = True),
         "strip_prefix": attr.string(mandatory = True),
         "checksum": attr.string(),
+        "link_deps": attr.string_list(default = []),
         "build_deps": attr.label_list(default = []),
         "build_script_data": attr.label_list(default = []),
         "build_script_env": attr.string_dict(),

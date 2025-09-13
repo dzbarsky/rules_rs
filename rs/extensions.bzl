@@ -239,17 +239,29 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
             dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
+            kind = dep.get("kind", "normal")
+            if kind == "dev":
+                # Drop dev deps
+                continue
+
             if dep.get("optional") and dep_alias not in features_enabled:
                 for triple, feature_set in platform_features_enabled.items():
                     if dep_alias not in feature_set:
                         continue
 
-                    if proc_macro:
-                        # TODO(zbarsky): should be platform-specific, but this proc_macro stuff should get simplified anyway
-                        proc_macro_deps.add(bazel_target)
+                    # TODO(zbarsky): platform-specific build deps?
+                    if kind == "build":
+                        if proc_macro:
+                            proc_macro_build_deps.add(bazel_target)
+                        else:
+                            build_deps.add(bazel_target)
                     else:
-                        platform_deps[triple].add(bazel_target)
-                        dep_feature_resolutions.triples_compatible_with.add(triple)
+                        if proc_macro:
+                            # TODO(zbarsky): should be platform-specific, but this proc_macro stuff should get simplified anyway
+                            proc_macro_deps.add(bazel_target)
+                        else:
+                            platform_deps[triple].add(bazel_target)
+                            dep_feature_resolutions.triples_compatible_with.add(triple)
 
                     if dep_name != dep_alias:
                         platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
@@ -260,11 +272,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
                 continue
 
-            kind = dep.get("kind", "normal")
-            if kind == "dev":
-                # Drop dev deps
-                continue
-            elif kind == "build":
+            if kind == "build":
                 if proc_macro:
                     proc_macro_build_deps.add(bazel_target)
                 else:
@@ -702,11 +710,16 @@ def _generate_hub_and_spokes(
             crate_features = []
             rustc_flags = []
 
+        # TODO(zbarsky): Better way to detect this?
+        deps = feature_resolutions.deps | set(deps)
+        link_deps = [dep for dep in deps if "openssl-sys" in dep]
+
         kwargs = dict(
             crate = name,
             version = version,
             checksum = checksum,
-            build_deps = sorted(feature_resolutions.build_deps | set(deps)),
+            link_deps = sorted(link_deps),
+            build_deps = sorted(feature_resolutions.build_deps),
             build_script_data = build_script_data,
             build_script_env = build_script_env,
             build_script_toolchains = build_script_toolchains,
@@ -714,7 +727,7 @@ def _generate_hub_and_spokes(
             proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
             proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
             data = data,
-            deps = sorted(feature_resolutions.deps),
+            deps = sorted(deps),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             aliases = feature_resolutions.aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
