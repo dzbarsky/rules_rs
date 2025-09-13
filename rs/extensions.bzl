@@ -251,32 +251,16 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             else:
                 match = {triple: True for triple in platform_triples}
 
-            if dep.get("optional") and dep_alias not in features_enabled:
-                for triple, feature_set in platform_features_enabled.items():
-                    if dep_alias not in feature_set or not match[triple]:
-                        continue
-
-                    # TODO(zbarsky): platform-specific build deps?
-                    if kind == "build":
-                        if proc_macro:
-                            proc_macro_build_deps.add(bazel_target)
-                        else:
-                            build_deps.add(bazel_target)
-                    else:
-                        if proc_macro:
-                            # TODO(zbarsky): should be platform-specific, but this proc_macro stuff should get simplified anyway
-                            proc_macro_deps.add(bazel_target)
-                        else:
-                            platform_deps[triple].add(bazel_target)
-                            dep_feature_resolutions.triples_compatible_with.add(triple)
-
-                    if dep_name != dep_alias:
-                        platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
-
-                    dep_feature_resolutions.platform_features_enabled[triple].update(dep.get("features", []))
-                    if dep.get("default_features", True):
-                        dep_feature_resolutions.platform_features_enabled[triple].add("default")
-
+            enabled = not dep.get("optional", False)
+            if not enabled:
+                if dep_alias in features_enabled:
+                    enabled = True
+                else:
+                    for triple, feature_set in platform_features_enabled.items():
+                        if match[triple] and dep_alias in feature_set:
+                            enabled = True
+                            break
+            if not enabled:
                 continue
 
             if kind == "build":
@@ -285,7 +269,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 else:
                     build_deps.add(bazel_target)
 
-            if not target:
+            if all(match.values()):
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
                 else:
@@ -639,12 +623,15 @@ def _generate_hub_and_spokes(
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
         )
 
+    workspace_deps = set()
+
     # Set initial set of features from Cargo.tomls
     for package in cargo_metadata["packages"]:
         for dep in package["dependencies"]:
             if dep["source"] != "registry+https://github.com/rust-lang/crates.io-index":
                 continue
             name = dep["name"]
+            workspace_deps.add(name)
             versions = versions_by_name[name]
             version = select_matching_version(dep["req"], versions)
             if not version:
@@ -790,6 +777,16 @@ alias(
             # TODO(zbarsky): Select max version?
             version = versions[-1],
         ))
+
+    hub_contents.append("""
+filegroup(
+    name = "_workspace_deps",
+    srcs = [
+        {srcs}
+    ],
+)""".format(
+        srcs = ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
+    ))
 
     _hub_repo(
         name = hub_name,
