@@ -716,7 +716,7 @@ def _generate_hub_and_spokes(
 
         # TODO(zbarsky): Better way to detect this?
         deps = feature_resolutions.deps | set(deps)
-        link_deps = [dep for dep in deps if "openssl-sys" in dep]
+        link_deps = [dep for dep in deps if "openssl-sys" in dep or "aws-lc-sys" in dep]
 
         kwargs = dict(
             crate = name,
