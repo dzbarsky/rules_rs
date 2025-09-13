@@ -11,9 +11,14 @@ def run_toml2json(ctx, toml2json, toml_file):
 def generate_build_file(attr, cargo_toml):
     # TODO(zbarsky): Handle implicit build.rs case for git repo??
     package = cargo_toml.get("package", {})
+    bazel_metadata = package.get("metadata", {}).get("bazel", {})
+
     build_script = package.get("build")
     if build_script:
         build_script = build_script.removeprefix("./")
+    if bazel_metadata.get("gen_build_script") == False:
+        build_script = None
+
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
@@ -156,6 +161,8 @@ cargo_build_script(
     visibility = ["//visibility:private"],
 )"""
 
+    build_content += bazel_metadata.get("additive_build_file_content", "")
+
     return build_content.format(
         library_rule_type = "rust_proc_macro" if is_proc_macro else "rust_library",
         crate = repr(attr.crate),
@@ -174,7 +181,7 @@ cargo_build_script(
         build_script_env = repr(attr.build_script_env),
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
         rustc_flags = repr(attr.rustc_flags or []),
-        deps = ",\n        ".join(['"%s"' % d for d in deps]),
+        deps = ",\n        ".join(['"%s"' % d for d in deps + bazel_metadata.get("deps", [])]),
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
         conditional_deps = attr.conditional_deps,
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
