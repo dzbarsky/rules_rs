@@ -158,10 +158,12 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return name + "-" + version
 
+_ALL_PLATFORMS = "*"
+
 def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples):
+    triples = platform_triples + [_ALL_PLATFORMS]
     return struct(
-        features_enabled = set(),
-        platform_features_enabled = {triple: set() for triple in platform_triples},
+        features_enabled = {triple: set() for triple in triples},
 
         # If set, we will set `target_compatible_with`. If have "*" that means all.
         triples_compatible_with = set(),
@@ -170,10 +172,8 @@ def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possi
         build_deps = set(),
         proc_macro_deps = set(),
         proc_macro_build_deps = set(),
-        deps = set(),
-        platform_deps = {triple: set() for triple in platform_triples},
-        aliases = dict(),
-        platform_aliases = {triple: dict() for triple in platform_triples},
+        deps = {triple: set() for triple in triples},
+        aliases = {triple: dict() for triple in triples},
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
         possible_deps = possible_deps,
@@ -184,20 +184,17 @@ def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possi
 def _count(feature_resolutions_by_fq_crate):
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
-        n += len(feature_resolutions.features_enabled)
-        for triple_features in feature_resolutions.platform_features_enabled.values():
-            n += len(triple_features)
+        for features in feature_resolutions.features_enabled.values():
+            n += len(features)
 
         n += len(feature_resolutions.build_deps)
         n += len(feature_resolutions.proc_macro_deps)
         n += len(feature_resolutions.proc_macro_build_deps)
-        n += len(feature_resolutions.deps)
-        for triple_deps in feature_resolutions.platform_deps.values():
-            n += len(triple_deps)
+        for deps in feature_resolutions.deps.values():
+            n += len(deps)
 
-        n += len(feature_resolutions.aliases)
-        for triple_aliases in feature_resolutions.platform_aliases.values():
-            n += len(triple_aliases)
+        for aliases in feature_resolutions.aliases.values():
+            n += len(aliases)
 
     print("Got count", n)
     return n
@@ -205,13 +202,8 @@ def _count(feature_resolutions_by_fq_crate):
 def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples):
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
-        platform_features_enabled = feature_resolutions.platform_features_enabled
-
         deps = feature_resolutions.deps
-        platform_deps = feature_resolutions.platform_deps
-
         aliases = feature_resolutions.aliases
-        platform_aliases = feature_resolutions.platform_aliases
 
         build_deps = feature_resolutions.build_deps
         proc_macro_build_deps = feature_resolutions.proc_macro_build_deps
@@ -250,16 +242,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 match = cfg_matches_ast_for_triples(target, platform_triples)
             else:
                 match = {triple: True for triple in platform_triples}
-
             enabled = not dep.get("optional", False)
             if not enabled:
-                if dep_alias in features_enabled:
-                    enabled = True
-                else:
-                    for triple, feature_set in platform_features_enabled.items():
-                        if match[triple] and dep_alias in feature_set:
-                            enabled = True
-                            break
+                for triple, feature_set in features_enabled.items():
+                    if (triple == _ALL_PLATFORMS or match[triple]) and dep_alias in feature_set:
+                        enabled = True
+                        break
             if not enabled:
                 continue
 
@@ -271,68 +259,28 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 continue
 
             if all(match.values()):
+                match = {_ALL_PLATFORMS: True}
+
+            for triple, matched in match.items():
+                if not matched:
+                    continue
+
                 if proc_macro:
                     proc_macro_deps.add(bazel_target)
                 else:
-                    deps.add(bazel_target)
+                    deps[triple].add(bazel_target)
 
                 if dep_name != dep_alias:
-                    aliases[bazel_target] = dep_alias.replace("-", "_")
+                    aliases[triple][bazel_target] = dep_alias.replace("-", "_")
 
-                dep_feature_resolutions.triples_compatible_with.add("*")
-                dep_feature_resolutions.features_enabled.update(dep.get("features", []))
+                dep_feature_resolutions.triples_compatible_with.add(triple)
+                triple_features = dep_feature_resolutions.features_enabled[triple]
+                triple_features.update(dep.get("features", []))
                 if dep.get("default_features", True):
-                    dep_feature_resolutions.features_enabled.add("default")
-            else:
-                for triple in platform_triples:
-                    if match[triple]:
-                        dep_feature_resolutions.triples_compatible_with.add(triple)
-                        platform_deps[triple].add(bazel_target)
-                        if dep_name != dep_alias:
-                            platform_aliases[triple][bazel_target] = dep_alias.replace("-", "_")
-                        dep_feature_resolutions.platform_features_enabled[triple].update(dep.get("features", []))
-                        if dep.get("default_features", True):
-                            dep_feature_resolutions.platform_features_enabled[triple].add("default")
+                    triple_features.add("default")
 
-        # Enable any features that are implied by previously-enabled features.
-        implied_features = [
-            implied_feature.removeprefix("dep:")
-            for enabled_feature in features_enabled
-            for implied_feature in possible_features.get(enabled_feature, [])
-        ]
-
-        features_enabled.update([
-            f
-            for f in implied_features
-            if "/" not in f
-        ])
-
-        dep_features = [feature for feature in implied_features if "/" in feature]
-        for feature in dep_features:
-            dep_name, dep_feature = feature.split("/")
-
-            if dep_name.endswith("?"):
-                dep_name = dep_name[:-1]
-            else:
-                # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
-                features_enabled.add(dep_name)
-
-            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-            if not dep_fq:
-                # Maybe it's an alias?
-                for dep in feature_resolutions.possible_deps:
-                    if dep.get("name") == dep_name and "package" in dep:
-                        dep_name = dep["package"]
-                        break
-                dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-
-            if not dep_fq:
-                print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
-                continue
-
-            feature_resolutions_by_fq_crate[dep_fq].features_enabled.add(dep_feature)
-
-        for triple, feature_set in platform_features_enabled.items():
+        for triple, feature_set in features_enabled.items():
+            # Enable any features that are implied by previously-enabled features.
             implied_features = [
                 implied_feature.removeprefix("dep:")
                 for enabled_feature in feature_set
@@ -368,7 +316,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                     continue
 
-                feature_resolutions_by_fq_crate[dep_fq].platform_features_enabled[triple].add(dep_feature)
+                feature_resolutions_by_fq_crate[dep_fq].features_enabled[triple].add(dep_feature)
 
 def _parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
@@ -642,11 +590,10 @@ def _generate_hub_and_spokes(
             if dep["uses_default_features"]:
                 features.append("default")
 
-            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
-            feature_resolutions.features_enabled.update(features)
-
             # Assume we could build top-level dep on any platform.
-            feature_resolutions.triples_compatible_with.add("*")
+            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
+            feature_resolutions.features_enabled[_ALL_PLATFORMS].update(features)
+            feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
 
     # Do some round of mutual resolution; bail when no more changes
     # Resolution process always enables new crates/features so we can just count total enabled
@@ -676,13 +623,17 @@ def _generate_hub_and_spokes(
         if "*" in triples_compatible_with or not triples_compatible_with:
             triples_compatible_with = set(platform_triples)
 
-        # Remove conditional deps that are present on all platforms already.
-        for platform_dep_set in feature_resolutions.platform_deps.values():
-            platform_dep_set.difference_update(feature_resolutions.deps)
+        all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
+        all_aliases = feature_resolutions.aliases.pop(_ALL_PLATFORMS)
+        features_enabled = feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
 
-        conditional_deps = _select(feature_resolutions.platform_deps)
-        conditional_aliases = _select(feature_resolutions.platform_aliases, default = {})
-        conditional_crate_features = _select(feature_resolutions.platform_features_enabled)
+        # Remove conditional deps that are present on all platforms already.
+        for triple, deps in feature_resolutions.deps.items():
+            deps.difference_update(all_platform_deps)
+
+        conditional_deps = _select(feature_resolutions.deps)
+        conditional_aliases = _select(feature_resolutions.aliases, default = {})
+        conditional_crate_features = _select(feature_resolutions.features_enabled)
 
         annotation = annotations.get(name)
         if annotation:
@@ -703,7 +654,7 @@ def _generate_hub_and_spokes(
             rustc_flags = []
 
         # TODO(zbarsky): Better way to detect this?
-        deps = feature_resolutions.deps | set(deps)
+        deps = all_platform_deps | set(deps)
         link_deps = [dep for dep in deps if "openssl-sys" in dep or "aws-lc-sys" in dep]
 
         kwargs = dict(
@@ -721,9 +672,9 @@ def _generate_hub_and_spokes(
             data = data,
             deps = sorted(deps),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
-            aliases = feature_resolutions.aliases,
+            aliases = all_aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
-            crate_features = repr(sorted(feature_resolutions.features_enabled | set(crate_features))),
+            crate_features = repr(sorted(features_enabled | set(crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
             target_compatible_with = [_platform(triple) for triple in sorted(triples_compatible_with)],
             fallback_edition = package.get("edition"),
