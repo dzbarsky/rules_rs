@@ -268,6 +268,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     proc_macro_build_deps.add(bazel_target)
                 else:
                     build_deps.add(bazel_target)
+                continue
 
             if all(match.values()):
                 if proc_macro:
