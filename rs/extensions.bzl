@@ -653,15 +653,10 @@ def _generate_hub_and_spokes(
             crate_features = []
             rustc_flags = []
 
-        # TODO(zbarsky): Better way to detect this?
-        deps = all_platform_deps | set(deps)
-        link_deps = [dep for dep in deps if "openssl-sys" in dep or "aws-lc-sys" in dep]
-
         kwargs = dict(
             crate = name,
             version = version,
             checksum = checksum,
-            link_deps = sorted(link_deps),
             build_deps = sorted(feature_resolutions.build_deps),
             build_script_data = build_script_data,
             build_script_env = build_script_env,
@@ -670,7 +665,7 @@ def _generate_hub_and_spokes(
             proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
             proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
             data = data,
-            deps = sorted(deps),
+            deps = sorted(all_platform_deps | set(deps)),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             aliases = all_aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
@@ -750,7 +745,7 @@ filegroup(
     return facts
 
 def _crate_impl(mctx):
-    toml2json = None
+    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
 
     facts = {}
     direct_deps = []
@@ -766,9 +761,6 @@ def _crate_impl(mctx):
                 for annotation in mod.tags.annotation
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
-
-            if not toml2json:
-                toml2json = mctx.load_wasm(cfg._wasm2json)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples)
 
@@ -797,8 +789,6 @@ _from_cargo = tag_class(
         "platform_triples": attr.string_list(
             mandatory = True,
         ),
-    } | {
-        "_wasm2json": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
     },
 )
 
