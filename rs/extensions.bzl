@@ -196,10 +196,9 @@ def _count(feature_resolutions_by_fq_crate):
         for aliases in feature_resolutions.aliases.values():
             n += len(aliases)
 
-    print("Got count", n)
     return n
 
-def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples):
+def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
         deps = feature_resolutions.deps
@@ -214,6 +213,11 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
+            kind = dep.get("kind", "normal")
+            if kind == "dev":
+                # Drop dev deps
+                continue
+
             if "package" in dep:
                 dep_name = dep["package"]
                 dep_alias = dep["name"]
@@ -227,14 +231,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 continue
 
             bazel_target = "@{}//:{}".format(hub_name, dep_fq)
+            if kind == "normal" and bazel_target in deps[_ALL_PLATFORMS]:
+                # Bail early if feature is maximally enabled.
+                continue
 
             proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
             dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
-
-            kind = dep.get("kind", "normal")
-            if kind == "dev":
-                # Drop dev deps
-                continue
 
             target = dep.get("target")
             if target:
@@ -313,7 +315,8 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                     dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
 
                 if not dep_fq:
-                    print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
+                    if debug:
+                        print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                     continue
 
                 feature_resolutions_by_fq_crate[dep_fq].features_enabled[triple].add(dep_feature)
@@ -360,7 +363,9 @@ def _generate_hub_and_spokes(
         toml2json,
         annotations,
         cargo_lock_path,
-        platform_triples):
+        platform_triples,
+        debug,
+        dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
@@ -560,7 +565,7 @@ def _generate_hub_and_spokes(
                         "features": spec.get("features", []),
                     })
 
-            if not possible_deps:
+            if not possible_deps and debug:
                 print(name, version, package["source"])
 
         for dep in possible_deps:
@@ -595,15 +600,19 @@ def _generate_hub_and_spokes(
             feature_resolutions.features_enabled[_ALL_PLATFORMS].update(features)
             feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
 
-    # Do some round of mutual resolution; bail when no more changes
+    # Do some rounds of mutual resolution; bail when no more changes
     # Resolution process always enables new crates/features so we can just count total enabled
     # instead of being careful about change tracking.
     initial_count = 0
     for i in range(10):
         mctx.report_progress("Running round {} of dependency/feature resolution".format(i))
 
-        _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples)
+        _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug)
+
         count = _count(feature_resolutions_by_fq_crate)
+        if debug:
+            print("Got count", count)
+
         if count == initial_count:
             break
 
@@ -678,6 +687,9 @@ def _generate_hub_and_spokes(
         repo_name = _spoke_repo(hub_name, name, version)
 
         if checksum:
+            if dry_run:
+                continue
+
             crate_repository(
                 name = repo_name,
                 url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version),
@@ -688,6 +700,9 @@ def _generate_hub_and_spokes(
             build_file_content = generate_build_file(struct(**kwargs), package["cargo_toml_json"])
 
             repo_path, sha = _parse_git_url(package["source"])
+
+            if dry_run:
+                continue
 
             new_git_repository(
                 name = repo_name,
@@ -735,6 +750,9 @@ filegroup(
         srcs = ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
     ))
 
+    if dry_run:
+        return
+
     _hub_repo(
         name = hub_name,
         contents = {
@@ -745,7 +763,9 @@ filegroup(
     return facts
 
 def _crate_impl(mctx):
-    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
+    toml2json = mctx.which("toml2json")
+    if not toml2json:
+        toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
 
     facts = {}
     direct_deps = []
@@ -762,7 +782,11 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples)
+            if cfg.debug:
+                for _ in range(20):
+                    _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
+
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -789,6 +813,7 @@ _from_cargo = tag_class(
         "platform_triples": attr.string_list(
             mandatory = True,
         ),
+        "debug": attr.bool(),
     },
 )
 
