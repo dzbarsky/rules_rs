@@ -209,6 +209,8 @@ def triple_to_cfg_attrs(triple, features, target_features):
     abi_guess = _abi_from_env(env_part)
 
     return {
+        "_triple": triple,
+
         "target_arch": arch_part,
         "target_vendor": vendor_part,
         "target_os": os_norm,
@@ -303,10 +305,11 @@ def cfg_matches(expr, triple, features=[], target_features=[]):
     return _cfg_eval(ast, ctx)
 
 def cfg_matches_expr_for_triples(expr, triples, features=[], target_features=[]):
-    return cfg_matches_ast_for_triples(cfg_parse(expr), triples, features, target_features)
+    cfg_attrs = [triple_to_cfg_attrs(triple, features, target_features) for triple in triples]
+    return cfg_matches_expr_for_cfg_attrs(cfg_parse(expr), cfg_attrs, features, target_features)
 
-def cfg_matches_ast_for_triples(ast, triples, features=[], target_features=[]):
-    return {
-        triple: _cfg_eval(ast, triple_to_cfg_attrs(triple, features, target_features))
-        for triple in triples
-    }
+def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[], target_features=[]):
+    return cfg_matches_ast_for_triples(cfg_parse(expr), cfg_attrs)
+
+def cfg_matches_ast_for_triples(ast, cfg_attrs):
+    return {cfg_attr["_triple"]: _cfg_eval(ast, cfg_attr) for cfg_attr in cfg_attrs}

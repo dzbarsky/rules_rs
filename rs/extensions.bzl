@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
-load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_triples")
+load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load(
     "//rs/private:crate_repository.bzl",
     "crate_repository",
@@ -214,11 +214,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
-            kind = dep.get("kind", "normal")
-            if kind == "dev":
-                # Drop dev deps
-                continue
-
             if "package" in dep:
                 dep_name = dep["package"]
                 dep_alias = dep["name"]
@@ -226,17 +221,17 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_name = dep["name"]
                 dep_alias = dep_name
 
-            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-            if not dep_fq:
+            bazel_target = dep.get("bazel_target")
+            if not bazel_target:
                 # print("NOT FOUND", dep)
                 continue
 
-
-            bazel_target = "@{}//:{}".format(hub_name, dep_fq)
+            kind = dep.get("kind", "normal")
             if kind == "normal" and bazel_target in deps[_ALL_PLATFORMS]:
                 # Bail early if feature is maximally enabled.
                 continue
 
+            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
             proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
             dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
@@ -279,23 +274,36 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 if dep.get("default_features", True):
                     triple_features.add("default")
 
-        for triple, feature_set in features_enabled.items():
-            # Enable any features that are implied by previously-enabled features.
-            implied_features = [
-                implied_feature.removeprefix("dep:")
-                for enabled_feature in feature_set
-                for implied_feature in possible_features.get(enabled_feature, [])
-            ]
+        _propagate_feature_enablement(
+            fq_crate,
+            features_enabled,
+            feature_resolutions,
+            feature_resolutions_by_fq_crate,
+            possible_features,
+            possible_dep_fq_crate_by_name,
+            debug,
+         )
 
-            feature_set.update([
-                f
-                for f in implied_features
-                if "/" not in f
-            ])
 
-            dep_features = [feature for feature in implied_features if "/" in feature]
-            for feature in dep_features:
-                dep_name, dep_feature = feature.split("/")
+def _propagate_feature_enablement(
+        fq_crate,
+        features_enabled,
+        feature_resolutions,
+        feature_resolutions_by_fq_crate,
+        possible_features,
+        possible_dep_fq_crate_by_name,
+        debug):
+    for triple, feature_set in features_enabled.items():
+        # Enable any features that are implied by previously-enabled features.
+        for enabled_feature in list(feature_set):
+            for feature in possible_features.get(enabled_feature, []):
+                idx = feature.find("/")
+                if idx == -1:
+                    feature_set.add(feature.removeprefix("dep:"))
+                    continue
+
+                dep_name = feature[:idx]
+                dep_feature = feature[idx+1:]
 
                 if dep_name.endswith("?"):
                     dep_name = dep_name[:-1]
@@ -458,6 +466,7 @@ def _generate_hub_and_spokes(
             fail("Could not download")
 
     matches_all_triples = {triple: True for triple in platform_triples}
+    platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
 
     _date(mctx, "got tokens")
 
@@ -608,14 +617,28 @@ def _generate_hub_and_spokes(
             package["cargo_toml_json"] = fact["cargo_toml_json"]
 
         possible_features = fact["features"]
-        possible_deps = fact["dependencies"]
+        possible_deps = [dep for dep in fact["dependencies"] if dep.get("kind") != "dev"]
 
         for dep in possible_deps:
             target = dep.get("target")
             if target:
-                dep["target"] = cfg_matches_expr_for_triples(target, platform_triples)
+                dep["target"] = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
             else:
                 dep["target"] = matches_all_triples
+
+            if "package" in dep:
+                dep_name = dep["package"]
+                dep_alias = dep["name"]
+            else:
+                dep_name = dep["name"]
+                dep_alias = dep_name
+
+            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+            if not dep_fq:
+                # print("NOT FOUND", dep)
+                continue
+
+            dep["bazel_target"] = "@{}//:{}".format(hub_name, dep_fq)
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
@@ -837,7 +860,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(100):
+                for _ in range(200):
                     _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
