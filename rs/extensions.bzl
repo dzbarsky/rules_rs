@@ -1,10 +1,11 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
-load("//rs/private:cfg_parser.bzl", "cfg_matches_ast_for_triples", "cfg_parse")
+load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_triples")
 load(
     "//rs/private:crate_repository.bzl",
     "crate_repository",
     "generate_build_file",
+    "prune_cargo_toml_json",
     "run_toml2json",
 )
 load("//rs/private:semver.bzl", "select_matching_version")
@@ -230,6 +231,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # print("NOT FOUND", dep)
                 continue
 
+
             bazel_target = "@{}//:{}".format(hub_name, dep_fq)
             if kind == "normal" and bazel_target in deps[_ALL_PLATFORMS]:
                 # Bail early if feature is maximally enabled.
@@ -238,12 +240,8 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
             dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
-            target = dep.get("target")
-            if target:
-                # TODO(zbarsky): Lots of opportunity to save computations here.
-                match = cfg_matches_ast_for_triples(target, platform_triples)
-            else:
-                match = {triple: True for triple in platform_triples}
+            match = dep.get("target")
+
             enabled = not dep.get("optional", False)
             if not enabled:
                 for triple, feature_set in features_enabled.items():
@@ -357,6 +355,11 @@ def _sharded_path(crate):
         return "3/%s/%s" % (crate[0], crate)
     return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
 
+def _date(ctx, label):
+    return
+    result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
+    print(label, result.stdout)
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -376,8 +379,10 @@ def _generate_hub_and_spokes(
         cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
     """
+    _date(mctx, "start")
     mctx.watch(cargo_lock_path)
     cargo_lock = run_toml2json(mctx, toml2json, cargo_lock_path)
+    _date(mctx, "parsed")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
@@ -396,7 +401,6 @@ def _generate_hub_and_spokes(
 
         source = package["source"]
 
-        # TODO(zbarsky): Persist these in lockfile facts?
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             key = name + "_" + version
             fact = existing_facts.get(key)
@@ -414,6 +418,12 @@ def _generate_hub_and_spokes(
             )
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
+            key = source + "_" + name
+            fact = existing_facts.get(key)
+            if fact:
+                facts[key] = fact
+                continue
+
             url = _git_url_to_cargo_toml(source)
             token = mctx.download(
                 url,
@@ -424,6 +434,8 @@ def _generate_hub_and_spokes(
             download_tokens.append(token)
         else:
             fail("Unknown source " + source)
+
+    _date(mctx, "kicked off downloads")
 
     # TODO(zbarsky): Not sure why we need this weird hack to get `/bin/` into the path...
     cargo = mctx.path(Label("@rs_rust_host_tools//:cargo"))
@@ -436,12 +448,18 @@ def _generate_hub_and_spokes(
         fail(result.stdout + "\n" + result.stderr)
     cargo_metadata = json.decode(result.stdout)
 
+    _date(mctx, "parsed cargo metadata")
+
     # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
     mctx.report_progress("Downloading metadata")
     for token in download_tokens:
         result = token.wait()
         if not result.success:
             fail("Could not download")
+
+    matches_all_triples = {triple: True for triple in platform_triples}
+
+    _date(mctx, "got tokens")
 
     mctx.report_progress("Computing dependencies and features")
 
@@ -505,77 +523,105 @@ def _generate_hub_and_spokes(
             possible_features = fact["features"]
             possible_deps = fact["dependencies"]
         else:
-            cargo_toml_json = run_toml2json(mctx, toml2json, "{}_{}.Cargo.toml".format(name, version))
+            _date(mctx, "start parse " + name + source)
 
-            if cargo_toml_json.get("package", {}).get("name") != name:
+            key = source + "_" + name
+            fact = facts.get(key)
+            if fact:
+                fact = json.decode(fact)
+            else:
                 strip_prefix = None
-                if name in cargo_toml_json["workspace"]["members"]:
-                    strip_prefix = name
-                else:
-                    # TODO(zbarsky): more cases to handle here?
-                    for dep in cargo_toml_json["workspace"]["dependencies"].values():
-                        if type(dep) == "dict" and dep.get("package") == name:
-                            strip_prefix = dep["path"]
-                            break
+                cargo_toml_json = run_toml2json(mctx, toml2json, "{}_{}.Cargo.toml".format(name, version))
 
-                if strip_prefix:
-                    package["edition"] = cargo_toml_json["workspace"].get("edition")
-                    package["strip_prefix"] = strip_prefix
-                    download_path = strip_prefix + ".Cargo.toml"
-                    url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                    result = mctx.download(
-                        url,
-                        download_path,
-                        canonical_id = get_default_canonical_id(mctx, urls = [url]),
-                    )
-                    if not result.success:
-                        fail("Could not download")
-                    cargo_toml_json = run_toml2json(mctx, toml2json, download_path)
+                if cargo_toml_json.get("package", {}).get("name") != name:
+                    if name in cargo_toml_json["workspace"]["members"]:
+                        strip_prefix = name
+                    else:
+                        # TODO(zbarsky): more cases to handle here?
+                        for dep in cargo_toml_json["workspace"]["dependencies"].values():
+                            if type(dep) == "dict" and dep.get("package") == name:
+                                strip_prefix = dep["path"]
+                                break
 
-            package["cargo_toml_json"] = cargo_toml_json
+                    if strip_prefix:
+                        package["edition"] = cargo_toml_json["workspace"].get("edition")
+                        package["strip_prefix"] = strip_prefix
+                        download_path = strip_prefix + ".Cargo.toml"
+                        url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+                        print("downloading! " + name)
+                        result = mctx.download(
+                            url,
+                            download_path,
+                            canonical_id = get_default_canonical_id(mctx, urls = [url]),
+                        )
+                        if not result.success:
+                            fail("Could not download")
+                        cargo_toml_json = run_toml2json(mctx, toml2json, download_path)
 
-            possible_features = cargo_toml_json.get("features", {})
 
-            possible_deps = []
-            for dep, spec in cargo_toml_json.get("dependencies", {}).items():
-                if type(spec) == "string":
-                    possible_deps.append({
-                        "name": dep,
-                    })
-                else:
-                    possible_deps.append({
-                        "name": dep,
-                        "optional": spec.get("optional", False),
-                        "default_features": spec.get("default_features", True),
-                        "features": spec.get("features", []),
-                    })
+                dependencies = []
+                for dep, spec in cargo_toml_json.get("dependencies", {}).items():
+                    if type(spec) == "string":
+                        dependencies.append({
+                            "name": dep,
+                        })
+                    else:
+                        dependencies.append({
+                            "name": dep,
+                            "optional": spec.get("optional", False),
+                            "default_features": spec.get("default_features", True),
+                            "features": spec.get("features", []),
+                        })
 
-            for dep, spec in cargo_toml_json.get("build-dependencies", {}).items():
-                if type(spec) == "string":
-                    possible_deps.append({
-                        "name": dep,
-                        "kind": "build",
-                    })
-                else:
-                    possible_deps.append({
-                        "name": dep,
-                        "kind": "build",
-                        "optional": spec.get("optional", False),
-                        "default_features": spec.get("default_features", True),
-                        "features": spec.get("features", []),
-                    })
+                for dep, spec in cargo_toml_json.get("build-dependencies", {}).items():
+                    if type(spec) == "string":
+                        dependencies.append({
+                            "name": dep,
+                            "kind": "build",
+                        })
+                    else:
+                        dependencies.append({
+                            "name": dep,
+                            "kind": "build",
+                            "optional": spec.get("optional", False),
+                            "default_features": spec.get("default_features", True),
+                            "features": spec.get("features", []),
+                        })
 
-            if not possible_deps and debug:
-                print(name, version, package["source"])
+                if not dependencies and debug:
+                    print(name, version, package["source"])
+
+
+                fact = dict(
+                    features = cargo_toml_json.get("features", {}),
+                    cargo_toml_json = prune_cargo_toml_json(cargo_toml_json),
+                    dependencies = dependencies,
+                    strip_prefix = strip_prefix
+                )
+
+                # Nest a serialized JSON since max path depth is 5.
+                facts[key] = json.encode(fact)
+
+            _date(mctx, "end parse " + name)
+
+            package["strip_prefix"] = fact["strip_prefix"]
+            package["cargo_toml_json"] = fact["cargo_toml_json"]
+
+        possible_features = fact["features"]
+        possible_deps = fact["dependencies"]
 
         for dep in possible_deps:
             target = dep.get("target")
             if target:
-                dep["target"] = cfg_parse(target)
+                dep["target"] = cfg_matches_expr_for_triples(target, platform_triples)
+            else:
+                dep["target"] = matches_all_triples
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
         )
+
+    _date(mctx, "set up resolutions")
 
     workspace_deps = set()
 
@@ -600,6 +646,8 @@ def _generate_hub_and_spokes(
             feature_resolutions.features_enabled[_ALL_PLATFORMS].update(features)
             feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
 
+    _date(mctx, "set up initial deps!")
+
     # Do some rounds of mutual resolution; bail when no more changes
     # Resolution process always enables new crates/features so we can just count total enabled
     # instead of being careful about change tracking.
@@ -612,6 +660,8 @@ def _generate_hub_and_spokes(
         count = _count(feature_resolutions_by_fq_crate)
         if debug:
             print("Got count", count)
+
+        _date(mctx, "Round " + str(i))
 
         if count == initial_count:
             break
@@ -713,6 +763,8 @@ def _generate_hub_and_spokes(
                 remote = "https://github.com/%s.git" % repo_path,
             )
 
+    _date(mctx, "created repos")
+
     mctx.report_progress("Initializing hub")
 
     hub_contents = []
@@ -750,6 +802,8 @@ filegroup(
         srcs = ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
     ))
 
+    _date(mctx, "done")
+
     if dry_run:
         return
 
@@ -783,7 +837,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(20):
+                for _ in range(100):
                     _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)

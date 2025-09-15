@@ -17,6 +17,27 @@ def run_toml2json(ctx, toml2json, toml_file):
 
     return json.decode(result.output)
 
+# Keep in sync with below
+def prune_cargo_toml_json(cargo_toml_json):
+   package = cargo_toml_json.get("package", {})
+   lib = cargo_toml_json.get("lib", {})
+
+   return dict(
+       package = dict(
+           metadata = dict(
+               bazel = package.get("metadata", {}).get("bazel", {}),
+           ),
+           build = package.get("build"),
+           edition = package.get("edition"),
+           links = package.get("links"),
+       ),
+       lib = dict(
+           name = lib.get("name"),
+           proc_macro = lib.get("proc-macro") or lib.get("proc_macro"),
+           path = lib.get("path"),
+       ),
+   )
+
 def generate_build_file(attr, cargo_toml):
     package = cargo_toml.get("package", {})
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
@@ -29,7 +50,7 @@ def generate_build_file(attr, cargo_toml):
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
-    lib_path = lib.get("path", "src/lib.rs").removeprefix("./")
+    lib_path = (lib.get("path") or "src/lib.rs").removeprefix("./")
 
     edition = package.get("edition")
     if not edition or (type(edition) == "dict" and edition.get("workspace") == True):

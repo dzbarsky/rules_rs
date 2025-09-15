@@ -99,6 +99,8 @@ def cfg_parse(expr):
             if not pending_eq_key:
                 fail("cfg parse error: string literal not expected here.")
             key_for_eq = pending_eq_key.pop()
+            if key_for_eq == "feature":
+                fail("Feature evaluation in cfg is unsupported!")
             frames[len(frames)-1]["args"].append({"kind": "eq", "key": key_for_eq, "value": t.get("v")})
         elif t.get("t") == "COMMA":
             _emit_pending(frames, pending_ident, pending_eq_key)
