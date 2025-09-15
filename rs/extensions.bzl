@@ -121,6 +121,17 @@ _PROC_MACROS = set([
     "zvariant_derive",
 ])
 
+_DEFAULT_CRATE_ANNOTATION = struct(
+    gen_build_script = "auto",
+    build_script_data = [],
+    build_script_env = {},
+    build_script_toolchains = [],
+    data = [],
+    deps = [],
+    crate_features = [],
+    rustc_flags = [],
+)
+
 _PROC_MACROS_EXCEPTIONS = {
     "derive_more": ["2.0.1"],
     "time-macros": ["0.1.1"],
@@ -708,7 +719,7 @@ def _generate_hub_and_spokes(
         features_enabled = feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
 
         # Remove conditional deps that are present on all platforms already.
-        for triple, deps in feature_resolutions.deps.items():
+        for deps in feature_resolutions.deps.values():
             deps.difference_update(all_platform_deps)
 
         conditional_deps = _select(feature_resolutions.deps)
@@ -716,43 +727,27 @@ def _generate_hub_and_spokes(
         conditional_crate_features = _select(feature_resolutions.features_enabled)
 
         annotation = annotations.get(name)
-        if annotation:
-            gen_build_script = annotation.gen_build_script
-            build_script_data = annotation.build_script_data
-            build_script_env = annotation.build_script_env
-            build_script_toolchains = annotation.build_script_toolchains
-            data = annotation.data
-            deps = annotation.deps
-            crate_features = annotation.crate_features
-            rustc_flags = annotation.rustc_flags
-        else:
-            gen_build_script = "auto"
-            build_script_data = []
-            build_script_env = {}
-            build_script_toolchains = []
-            data = []
-            deps = []
-            crate_features = []
-            rustc_flags = []
+        if not annotation:
+            annotation = _DEFAULT_CRATE_ANNOTATION
 
         kwargs = dict(
             crate = name,
             version = version,
             checksum = checksum,
-            gen_build_script = gen_build_script,
+            gen_build_script = annotation.gen_build_script,
             build_deps = sorted(feature_resolutions.build_deps),
-            build_script_data = build_script_data,
-            build_script_env = build_script_env,
-            build_script_toolchains = build_script_toolchains,
-            rustc_flags = rustc_flags,
+            build_script_data = annotation.build_script_data,
+            build_script_env = annotation.build_script_env,
+            build_script_toolchains = annotation.build_script_toolchains,
+            rustc_flags = annotation.rustc_flags,
             proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
             proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
-            data = data,
-            deps = sorted(all_platform_deps | set(deps)),
+            data = annotation.data,
+            deps = sorted(all_platform_deps | set(annotation.deps)),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             aliases = all_aliases,
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
-            crate_features = repr(sorted(features_enabled | set(crate_features))),
+            crate_features = repr(sorted(features_enabled | set(annotation.crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
             target_compatible_with = [_platform(triple) for triple in sorted(triples_compatible_with)],
             fallback_edition = package.get("edition"),
