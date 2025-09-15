@@ -6,10 +6,10 @@ def _get(xs, index, default):
 def _emit_pending(frames, pending_ident, pending_eq_key):
     # Moves any pending identifier into a predicate node in the current frame.
     # If an '=' was seen but no string yet, that's a syntax error.
-    if len(pending_eq_key) > 0:
-        fail("cfg parse error: expected string literal after '=' for key '" + pending_eq_key[len(pending_eq_key)-1] + "'.")
-    if len(pending_ident) > 0:
-        frames[len(frames)-1]["args"].append({"kind": "pred", "name": pending_ident.pop()})
+    if pending_eq_key:
+        fail("cfg parse error: expected string literal after '=' for key '" + pending_eq_key[:-2] + "'.")
+    if pending_ident:
+        frames[len(frames)-1]["args"].append({"kind": "pred", "name": pending_ident})
 
 ############################################
 # Tokenizer
@@ -20,36 +20,29 @@ def _cfg_tokenize(expr):
     tokens = []
     ident_buf = []
     str_buf = []
-    in_string = []      # if non-empty, we are inside a string
-    in_escape = []      # if non-empty, the next char is escaped
+    in_string = False
+    in_escape = False
 
     for ch in expr.elems():
-        # Inside a string literal?
         if in_string:
             if in_escape:
                 str_buf.append(ch)
-                in_escape.pop()
+                in_escape = False
+            elif ch == "\\":
+                in_escape = True
+            elif ch == "\"":
+                tokens.append({"t": "STRING", "v": "".join(str_buf)})
+                str_buf = []
+                in_string = False
             else:
-                if ch == "\\":
-                    in_escape.append(True)
-                elif ch == "\"":
-                    tokens.append({"t": "STRING", "v": "".join(str_buf)})
-                    str_buf = []
-                    in_string.pop()
-                else:
-                    str_buf.append(ch)
+                str_buf.append(ch)
         else:
-            # Not inside a string
-            if ch.isalpha() or ch == "_":
-                ident_buf.append(ch)
-            elif ident_buf and ch.isdigit():
+            if ch.isalpha() or ch == "_" or (ident_buf and ch.isdigit()):
                 ident_buf.append(ch)
             else:
-                # Flush ident if any
-                if ident_buf:
+                if ident_buf != []:
                     tokens.append({"t": "IDENT", "v": "".join(ident_buf)})
                     ident_buf = []
-                # Handle non-ident characters
                 if ch == "(":
                     tokens.append({"t": "LPAREN"})
                 elif ch == ")":
@@ -59,85 +52,88 @@ def _cfg_tokenize(expr):
                 elif ch == "=":
                     tokens.append({"t": "EQ"})
                 elif ch == "\"":
-                    in_string.append(True)
-                else:
-                    # whitespace or other punctuation is ignored outside strings/idents
-                    pass
+                    in_string = True
+                # ignore whitespace/other
 
     if in_string:
         fail("cfg parse error: unterminated string literal.")
-
     if ident_buf:
         tokens.append({"t": "IDENT", "v": "".join(ident_buf)})
-
     return tokens
+
 
 ############################################
 # Parser (non-recursive; stack of frames)
 ############################################
 
 def cfg_parse(expr):
-    # Accept "cfg(...)" wrapper or a bare expression.
     tokens = _cfg_tokenize(expr)
     frames = [{"fn": "__ROOT__", "args": []}]
-    pending_ident = []
-    pending_eq_key = []
+    pending_ident = None
+    pending_eq_key = None
 
     for t in tokens:
-        if t.get("t") == "IDENT":
-            pending_ident.append(t.get("v"))
-        elif t.get("t") == "LPAREN":
+        kind = t["t"]
+        if kind == "IDENT":
+            pending_ident = t["v"]
+        elif kind == "LPAREN":
             if not pending_ident:
                 fail("cfg parse error: '(' not following identifier.")
-            fn_name = pending_ident.pop()
-            frames.append({"fn": fn_name, "args": []})
-        elif t.get("t") == "EQ":
+            frames.append({"fn": pending_ident, "args": []})
+            pending_ident = None
+        elif kind == "EQ":
             if not pending_ident:
                 fail("cfg parse error: '=' must follow a key identifier.")
-            pending_eq_key.append(pending_ident.pop())
-        elif t.get("t") == "STRING":
+            pending_eq_key = pending_ident
+            pending_ident = None
+        elif kind == "STRING":
             if not pending_eq_key:
                 fail("cfg parse error: string literal not expected here.")
-            key_for_eq = pending_eq_key.pop()
-            if key_for_eq == "feature":
+            if pending_eq_key == "feature":
                 fail("Feature evaluation in cfg is unsupported!")
-            frames[len(frames)-1]["args"].append({"kind": "eq", "key": key_for_eq, "value": t.get("v")})
-        elif t.get("t") == "COMMA":
+            frames[-1]["args"].append({
+                "kind": "eq",
+                "key": pending_eq_key,
+                "value": t["v"],
+            })
+            pending_eq_key = None
+        elif kind == "COMMA":
             _emit_pending(frames, pending_ident, pending_eq_key)
-        elif t.get("t") == "RPAREN":
+            pending_ident = None
+        elif kind == "RPAREN":
             _emit_pending(frames, pending_ident, pending_eq_key)
+            pending_ident = None
             closed = frames.pop()
             if not frames:
                 fail("cfg parse error: too many closing ')'.")
-            fname = closed.get("fn")
-            args_list = closed.get("args")
+            fname = closed["fn"]
+            args_list = closed["args"]
+            parent = frames[-1]["args"]
             if fname == "cfg":
                 if len(args_list) != 1:
                     fail("cfg parse error: cfg(...) must contain a single expression.")
-                frames[len(frames)-1]["args"].append(args_list[0])
+                parent.append(args_list[0])
             elif fname == "all":
-                frames[len(frames)-1]["args"].append({"kind": "all", "args": args_list})
+                parent.append({"kind": "all", "args": args_list})
             elif fname == "any":
-                frames[len(frames)-1]["args"].append({"kind": "any", "args": args_list})
+                parent.append({"kind": "any", "args": args_list})
             elif fname == "not":
                 if len(args_list) != 1:
                     fail("cfg parse error: not(...) must have exactly one argument.")
-                frames[len(frames)-1]["args"].append({"kind": "not", "args": args_list})
+                parent.append({"kind": "not", "args": args_list})
             else:
-                # Bare function names are not allowed besides cfg/all/any/not
                 fail("cfg parse error: unknown function '" + fname + "'.")
         else:
             fail("cfg parse error: unknown token kind.")
 
     _emit_pending(frames, pending_ident, pending_eq_key)
+    pending_ident = None
 
     if len(frames) != 1:
         fail("cfg parse error: unbalanced parentheses.")
 
-    root_args = frames[0].get("args")
+    root_args = frames[0]["args"]
     if len(root_args) != 1:
-        # Allow a naked bare predicate at top-level; otherwise it's ambiguous
-        # (we treat multiple top-level items as an implicit all(...), but we'll forbid it to be strict)
         if not root_args:
             fail("cfg parse error: empty expression.")
         fail("cfg parse error: multiple top-level expressions; wrap with all(...)/any(...).")
@@ -254,45 +250,49 @@ def _eval_eq(ctx, key, value):
 def _eval_pred(ctx, name):
     return ctx.get(name, False)
 
+
 def _cfg_eval(ast, ctx):
-    # Postorder traversal using an explicit stack.
     todo = [{"op": "VISIT", "node": ast}]
     results = []
-
-    # We must use a for-loop (no while); break when done.
     for _ in range(200000):
         if not todo:
             break
         instr = todo.pop()
-        if instr.get("op") == "VISIT":
-            node = instr.get("node")
-            kind = node.get("kind")
-            if (kind == "pred"):
-                results.append(_eval_pred(ctx, node.get("name")))
-            elif (kind == "eq"):
-                results.append(_eval_eq(ctx, node.get("key"), node.get("value")))
+        op = instr["op"]
+        if op == "VISIT":
+            node = instr["node"]
+            kind = node["kind"]
+            if kind == "pred":
+                results.append(_eval_pred(ctx, node["name"]))
+            elif kind == "eq":
+                results.append(_eval_eq(ctx, node["key"], node["value"]))
             else:
-                children = node.get("args")
-                todo.append({"op": "REDUCE", "name": kind, "n": len(children)})
-                # push children in reverse so leftmost is processed first
-                for _ci in range(len(children)):
-                    child = children[len(children)-1-_ci]
+                children = node["args"]
+                n = len(children)
+                todo.append({"op": "REDUCE", "name": kind, "n": n})
+                for child in reversed(children):
                     todo.append({"op": "VISIT", "node": child})
-        else:
-            opname = instr.get("name")
-            n = instr.get("n")
-            pulled = [results.pop() for _ in range(n)]
-            if opname == "all":
-                results.append(all(pulled))
-            elif opname == "any":
-                results.append(any(pulled))
-            elif opname == "not":
-                if len(pulled) != 1:
+        else:  # REDUCE
+            name = instr["name"]
+            n = instr["n"]
+            if name == "all":
+                ok = True
+                for _ in range(n):
+                    if not results.pop():
+                        ok = False
+                results.append(ok)
+            elif name == "any":
+                ok = False
+                for _ in range(n):
+                    if results.pop():
+                        ok = True
+                results.append(ok)
+            elif name == "not":
+                if n != 1:
                     fail("cfg eval error: not(...) arity mismatch.")
-                results.append(not pulled[0])
+                results.append(not results.pop())
             else:
-                fail("cfg eval error: unknown op '" + opname + "'.")
-
+                fail("cfg eval error: unknown op '" + name + "'.")
     if todo:
         fail("cfg eval error: internal traversal did not finish.")
     if len(results) != 1:

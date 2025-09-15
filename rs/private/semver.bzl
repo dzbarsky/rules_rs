@@ -55,7 +55,7 @@ def _satisfies_caret_or_bare(req_tuple, ver_tuple):
     return _cmp(ver_tuple, lo) >= 0 and _cmp(ver_tuple, hi) < 0
 
 def _parse_comparator_req(req):
-    for op in ("<=", ">=", "<", ">", "="):
+    for op in (">=", ">", "=", "<=", "<"):
         if req.startswith(op):
             return op, _parse_version(req[len(op):])
 

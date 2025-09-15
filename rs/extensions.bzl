@@ -127,7 +127,10 @@ _PROC_MACROS_EXCEPTIONS = {
 }
 
 def _spoke_repo(hub_name, name, version):
-    return "{}__{}-{}".format(hub_name, name, version).replace("+", "-")
+    s = "%s__%s-%s" % (hub_name, name, version)
+    if "+" in s:
+        s = s.replace("+", "-")
+    return s
 
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
@@ -210,7 +213,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
         proc_macro_deps = feature_resolutions.proc_macro_deps
 
         possible_dep_fq_crate_by_name = feature_resolutions.possible_dep_fq_crate_by_name
-        possible_features = feature_resolutions.possible_features
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
@@ -279,7 +281,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             features_enabled,
             feature_resolutions,
             feature_resolutions_by_fq_crate,
-            possible_features,
             possible_dep_fq_crate_by_name,
             debug,
          )
@@ -290,9 +291,10 @@ def _propagate_feature_enablement(
         features_enabled,
         feature_resolutions,
         feature_resolutions_by_fq_crate,
-        possible_features,
         possible_dep_fq_crate_by_name,
         debug):
+    possible_features = feature_resolutions.possible_features
+
     for triple, feature_set in features_enabled.items():
         # Enable any features that are implied by previously-enabled features.
         for enabled_feature in list(feature_set):
@@ -305,7 +307,7 @@ def _propagate_feature_enablement(
                 dep_name = feature[:idx]
                 dep_feature = feature[idx+1:]
 
-                if dep_name.endswith("?"):
+                if dep_name[-1] == "?":
                     dep_name = dep_name[:-1]
                 else:
                     # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
@@ -528,9 +530,6 @@ def _generate_hub_and_spokes(
 
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
-
-            possible_features = fact["features"]
-            possible_deps = fact["dependencies"]
         else:
             _date(mctx, "start parse " + name + source)
 
@@ -557,7 +556,6 @@ def _generate_hub_and_spokes(
                         package["strip_prefix"] = strip_prefix
                         download_path = strip_prefix + ".Cargo.toml"
                         url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                        print("downloading! " + name)
                         result = mctx.download(
                             url,
                             download_path,
@@ -860,7 +858,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(200):
+                for _ in range(0):
                     _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
