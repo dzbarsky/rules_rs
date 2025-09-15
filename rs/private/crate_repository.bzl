@@ -42,11 +42,15 @@ def generate_build_file(attr, cargo_toml):
     package = cargo_toml.get("package", {})
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
 
-    build_script = package.get("build")
-    if build_script:
-        build_script = build_script.removeprefix("./")
-    if bazel_metadata.get("gen_build_script") == False:
-        build_script = False
+    if attr.gen_build_script == "off":
+        build_script = None
+    else:
+        # What does `on` do? Fail the build if we don't detect one?
+        build_script = package.get("build")
+        if build_script:
+            build_script = build_script.removeprefix("./")
+        if bazel_metadata.get("gen_build_script") == False:
+            build_script = False
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
@@ -161,6 +165,7 @@ crate_repository = repository_rule(
         "url": attr.string(mandatory = True),
         "strip_prefix": attr.string(mandatory = True),
         "checksum": attr.string(),
+        "gen_build_script": attr.string(),
         "build_deps": attr.label_list(default = []),
         "build_script_data": attr.label_list(default = []),
         "build_script_env": attr.string_dict(),

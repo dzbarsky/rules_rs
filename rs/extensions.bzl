@@ -717,6 +717,7 @@ def _generate_hub_and_spokes(
 
         annotation = annotations.get(name)
         if annotation:
+            gen_build_script = annotation.gen_build_script
             build_script_data = annotation.build_script_data
             build_script_env = annotation.build_script_env
             build_script_toolchains = annotation.build_script_toolchains
@@ -725,6 +726,7 @@ def _generate_hub_and_spokes(
             crate_features = annotation.crate_features
             rustc_flags = annotation.rustc_flags
         else:
+            gen_build_script = "auto"
             build_script_data = []
             build_script_env = {}
             build_script_toolchains = []
@@ -737,6 +739,7 @@ def _generate_hub_and_spokes(
             crate = name,
             version = version,
             checksum = checksum,
+            gen_build_script = gen_build_script,
             build_deps = sorted(feature_resolutions.build_deps),
             build_script_data = build_script_data,
             build_script_env = build_script_env,
@@ -988,11 +991,11 @@ _annotation = tag_class(
         # "gen_binaries": attr.string_list(
         #     doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
         # ),
-        # "gen_build_script": attr.string(
-        #     doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",
-        #     values = _OPT_BOOL_VALUES.keys(),
-        #     default = "auto",
-        # ),
+        "gen_build_script": attr.string(
+            doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",
+            values = ["auto", "on", "off"],
+            default = "auto",
+        ),
         # "override_target_bin": attr.label(
         #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
         # ),
