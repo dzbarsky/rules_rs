@@ -11,8 +11,8 @@ name = "toml2json"
 path = "src/main.rs"
 
 [dependencies]
-dlmalloc = {version = "0.2", default-features = false, features = ["global"]}
-toml = {version = "0.8", default-features = false, features = ["parse"]}
+# dlmalloc = {version = "0.2", default-features = false, features = ["global"]}
+toml = {version = "0.9", default-features = false, features = ["parse", "serde"]}
 serde_json = {version = "1", default-features = false, features = ["alloc", "std"]}
 serde-transcode = { version = "1", default-features = false }
 

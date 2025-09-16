@@ -17,12 +17,12 @@ fn main() {
         bail(&format!("Usage: {prog} <input.toml>"));
     }
 
-    // Read TOML text (TOML must be UTF-8).
     let input = fs::read_to_string(&path)
         .unwrap_or_else(|e| bail(&format!("Failed to read {path}: {e}")));
 
     // Set up TOML -> JSON transcoding
-    let toml_de = toml::de::Deserializer::new(&input);
+    let toml_de = toml::de::Deserializer::parse(&input)
+        .unwrap_or_else(|e| bail(&format!("Parse failed: {e}")));
 
     // Buffered stdout to reduce write syscalls.
     let stdout = io::stdout();

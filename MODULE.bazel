@@ -20,6 +20,7 @@ cargo_bootstrap_repository = use_repo_rule("@rules_rust//cargo:defs.bzl", "cargo
 cargo_bootstrap_repository(
     name = "toml2json_host_bin",
     binary = "toml2json",
+    srcs = ["//toml2json:src/main.rs"],
     cargo_toml = "//toml2json:Cargo.toml",
     cargo_lockfile = "//toml2json:Cargo.lock",
     rust_toolchain_cargo_template = "@rust_host_tools//:bin/{tool}",
