@@ -43,7 +43,7 @@ def generate_build_file(attr, cargo_toml):
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
 
     if attr.gen_build_script == "off":
-        build_script = None
+        build_script = False
     else:
         # What does `on` do? Fail the build if we don't detect one?
         build_script = package.get("build")
