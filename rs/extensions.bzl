@@ -294,8 +294,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             feature_resolutions_by_fq_crate,
             possible_dep_fq_crate_by_name,
             debug,
-         )
-
+        )
 
 def _propagate_feature_enablement(
         fq_crate,
@@ -316,7 +315,7 @@ def _propagate_feature_enablement(
                     continue
 
                 dep_name = feature[:idx]
-                dep_feature = feature[idx+1:]
+                dep_feature = feature[idx + 1:]
 
                 if dep_name[-1] == "?":
                     dep_name = dep_name[:-1]
@@ -358,8 +357,7 @@ def _parse_git_url(url):
     return repo_path, sha
 
 def _git_url_to_cargo_toml(url):
-    repo_path, sha = _parse_git_url(url)
-    return "https://raw.githubusercontent.com/{}/{}/Cargo.toml".format(repo_path, sha)
+    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_git_url(url)
 
 def _sharded_path(crate):
     crate = crate.lower()
@@ -448,7 +446,7 @@ def _generate_hub_and_spokes(
             url = _git_url_to_cargo_toml(source)
             token = mctx.download(
                 url,
-                "{}_{}.Cargo.toml".format(name, version),
+                "%s_%s.Cargo.toml" % (name, version),
                 canonical_id = get_default_canonical_id(mctx, urls = [url]),
                 block = False,
             )
@@ -550,7 +548,7 @@ def _generate_hub_and_spokes(
                 fact = json.decode(fact)
             else:
                 strip_prefix = None
-                cargo_toml_json = run_toml2json(mctx, toml2json, "{}_{}.Cargo.toml".format(name, version))
+                cargo_toml_json = run_toml2json(mctx, toml2json, "%s_%s.Cargo.toml" % (name, version))
 
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     if name in cargo_toml_json["workspace"]["members"]:
@@ -575,7 +573,6 @@ def _generate_hub_and_spokes(
                         if not result.success:
                             fail("Could not download")
                         cargo_toml_json = run_toml2json(mctx, toml2json, download_path)
-
 
                 dependencies = []
                 for dep, spec in cargo_toml_json.get("dependencies", {}).items():
@@ -609,12 +606,11 @@ def _generate_hub_and_spokes(
                 if not dependencies and debug:
                     print(name, version, package["source"])
 
-
                 fact = dict(
                     features = cargo_toml_json.get("features", {}),
                     cargo_toml_json = prune_cargo_toml_json(cargo_toml_json),
                     dependencies = dependencies,
-                    strip_prefix = strip_prefix
+                    strip_prefix = strip_prefix,
                 )
 
                 # Nest a serialized JSON since max path depth is 5.
@@ -635,19 +631,16 @@ def _generate_hub_and_spokes(
             else:
                 dep["target"] = matches_all_triples
 
-            if "package" in dep:
-                dep_name = dep["package"]
-                dep_alias = dep["name"]
-            else:
+            dep_name = dep.get("package")
+            if not dep_name:
                 dep_name = dep["name"]
-                dep_alias = dep_name
 
             dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
             if not dep_fq:
                 # print("NOT FOUND", dep)
                 continue
 
-            dep["bazel_target"] = "@{}//:{}".format(hub_name, dep_fq)
+            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
@@ -685,7 +678,7 @@ def _generate_hub_and_spokes(
     # instead of being careful about change tracking.
     initial_count = 0
     for i in range(10):
-        mctx.report_progress("Running round {} of dependency/feature resolution".format(i))
+        mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
         _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug)
 
@@ -759,10 +752,12 @@ def _generate_hub_and_spokes(
             if dry_run:
                 continue
 
+            name_version = (name, version)
+
             crate_repository(
                 name = repo_name,
-                url = "https://crates.io/api/v1/crates/{}/{}/download".format(name, version),
-                strip_prefix = "{}-{}".format(name, version),
+                url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
+                strip_prefix = "%s-%s" % name_version,
                 **kwargs
             )
         else:
@@ -811,15 +806,15 @@ alias(
             version = versions[-1],
         ))
 
-    hub_contents.append("""
+    hub_contents.append(
+        """
 filegroup(
     name = "_workspace_deps",
     srcs = [
-        {srcs}
+       %s 
     ],
-)""".format(
-        srcs = ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
-    ))
+)""" % ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
+    )
 
     _date(mctx, "done")
 
@@ -844,7 +839,7 @@ def _crate_impl(mctx):
     direct_deps = []
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
-            fail("`.from_cargo` is required. Please update {}".format(mod.name))
+            fail("`.from_cargo` is required. Please update %s" % mod.name)
 
         for cfg in mod.tags.from_cargo:
             direct_deps.append(cfg.name)
@@ -856,7 +851,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(0):
+                for _ in range(50):
                     _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
@@ -1041,9 +1036,7 @@ crate = module_extension(
 def _hub_repo_impl(rctx):
     for path, contents in rctx.attr.contents.items():
         rctx.file(path, contents)
-    rctx.file("WORKSPACE.bazel", """workspace(name = "{}")""".format(
-        rctx.name,
-    ))
+    rctx.file("WORKSPACE.bazel", 'workspace(name = "%s")' % rctx.name)
 
 _hub_repo = repository_rule(
     implementation = _hub_repo_impl,
