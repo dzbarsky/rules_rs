@@ -16,6 +16,16 @@ use_repo(
     "rs_rust_host_tools",
 )
 
+cargo_bootstrap_repository = use_repo_rule("@rules_rust//cargo:defs.bzl", "cargo_bootstrap_repository")
+cargo_bootstrap_repository(
+    name = "toml2json_host_bin",
+    binary = "toml2json",
+    cargo_toml = "//toml2json:Cargo.toml",
+    cargo_lockfile = "//toml2json:Cargo.lock",
+    rust_toolchain_cargo_template = "@rust_host_tools//:bin/{tool}",
+    rust_toolchain_rustc_template = "@rust_host_tools//:bin/{tool}",
+)
+
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")

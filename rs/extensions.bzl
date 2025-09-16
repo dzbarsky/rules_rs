@@ -382,7 +382,6 @@ def _date(ctx, label):
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
-        toml2json,
         annotations,
         cargo_lock_path,
         platform_triples,
@@ -394,13 +393,12 @@ def _generate_hub_and_spokes(
         mctx (module_ctx): The module context object.
         annotations (dict): Annotation tags to apply.
         hub_name (string): name
-        toml2json (wasm module):
         cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
     """
     _date(mctx, "start")
     mctx.watch(cargo_lock_path)
-    cargo_lock = run_toml2json(mctx, toml2json, cargo_lock_path)
+    cargo_lock = run_toml2json(mctx, cargo_lock_path)
     _date(mctx, "parsed")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
@@ -548,7 +546,7 @@ def _generate_hub_and_spokes(
                 fact = json.decode(fact)
             else:
                 strip_prefix = None
-                cargo_toml_json = run_toml2json(mctx, toml2json, "%s_%s.Cargo.toml" % (name, version))
+                cargo_toml_json = run_toml2json(mctx, "%s_%s.Cargo.toml" % (name, version))
 
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     if name in cargo_toml_json["workspace"]["members"]:
@@ -572,7 +570,7 @@ def _generate_hub_and_spokes(
                         )
                         if not result.success:
                             fail("Could not download")
-                        cargo_toml_json = run_toml2json(mctx, toml2json, download_path)
+                        cargo_toml_json = run_toml2json(mctx, download_path)
 
                 dependencies = []
                 for dep, spec in cargo_toml_json.get("dependencies", {}).items():
@@ -831,10 +829,6 @@ filegroup(
     return facts
 
 def _crate_impl(mctx):
-    toml2json = mctx.which("toml2json")
-    if not toml2json:
-        toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-
     facts = {}
     direct_deps = []
     for mod in mctx.modules:
@@ -852,9 +846,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(50):
-                    _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, toml2json, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,

@@ -6,6 +6,10 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib"]
 
+[[bin]]
+name = "toml2json"
+path = "src/main.rs"
+
 [dependencies]
 dlmalloc = {version = "0.2", default-features = false, features = ["global"]}
 toml = {version = "0.8", default-features = false, features = ["parse"]}

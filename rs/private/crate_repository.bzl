@@ -1,21 +1,11 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 
-def run_toml2json(ctx, toml2json, toml_file):
-    if type(toml2json) == "path":
-        # Non-hermetic fastpath; `cargo install toml2json`
-        ctx.read(toml_file)
-        result = ctx.execute([toml2json, toml_file])
-        if result.return_code != 0:
-            fail(result.stdout)
-
-        return json.decode(result.stdout)
-
-    data = ctx.read(toml_file)
-    result = ctx.execute_wasm(toml2json, "toml2json", input=data)
+def run_toml2json(ctx, toml_file):
+    result = ctx.execute([Label("@toml2json_host_bin//:toml2json"), toml_file])
     if result.return_code != 0:
-        fail(result.output)
+        fail(result.stdout + result.stderr)
 
-    return json.decode(result.output)
+    return json.decode(result.stdout)
 
 # Keep in sync with below
 def prune_cargo_toml_json(cargo_toml_json):
@@ -147,11 +137,7 @@ def _crate_repository_impl(rctx):
         sha256 = rctx.attr.checksum,
     )
 
-    toml2json = rctx.which("toml2json")
-    if not toml2json:
-        toml2json = rctx.load_wasm(rctx.attr._toml2json)
-
-    cargo_toml = run_toml2json(rctx, toml2json, "Cargo.toml")
+    cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
     rctx.file("BUILD.bazel", generate_build_file(rctx.attr, cargo_toml))
 
@@ -182,6 +168,6 @@ crate_repository = repository_rule(
         "conditional_crate_features": attr.string(default = ""),
         "target_compatible_with": attr.string_list(mandatory = True),
         "fallback_edition": attr.string(default = "2015"),
-        "_toml2json": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
+        "_toml2json_wasm": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
     },
 )
