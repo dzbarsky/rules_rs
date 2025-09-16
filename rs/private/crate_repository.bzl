@@ -66,12 +66,8 @@ rust_crate(
     deps = [
         {deps}
     ]{conditional_deps},
-    extra_deps = {extra_deps},
     data = [
         {data}
-    ],
-    proc_macro_deps = [
-        {proc_macro_deps}
     ],
     crate_features = {crate_features}{conditional_crate_features},
     crate_root = {lib_path},
@@ -91,9 +87,6 @@ rust_crate(
     ],
     build_script_env = {build_script_env},
     build_script_toolchains = {build_script_toolchains},
-    proc_macro_build_deps = [
-        {proc_macro_build_deps}
-    ],
     is_proc_macro = {is_proc_macro},
 )
 
@@ -107,11 +100,9 @@ rust_crate(
         version = repr(attr.version),
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
         conditional_aliases = attr.conditional_aliases,
-        deps = ",\n        ".join(['"%s"' % d for d in attr.deps]),
-        extra_deps = repr(bazel_metadata.get("deps", [])),
+        deps = ",\n        ".join(['"%s"' % d for d in attr.deps + bazel_metadata.get("deps", [])]),
         conditional_deps = attr.conditional_deps,
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
-        proc_macro_deps = ",\n        ".join(['"%s"' % d for d in attr.proc_macro_deps]),
         crate_features = attr.crate_features,
         conditional_crate_features = attr.conditional_crate_features,
         lib_path = repr(lib_path),
@@ -124,7 +115,6 @@ rust_crate(
         build_deps = ",\n        ".join(['"%s"' % d for d in attr.build_deps]),
         build_script_env = repr(attr.build_script_env),
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
-        proc_macro_build_deps = ",\n        ".join(['"%s"' % d for d in attr.proc_macro_build_deps]),
         is_proc_macro = repr(is_proc_macro),
     )
 
@@ -157,8 +147,6 @@ crate_repository = repository_rule(
         "build_script_env": attr.string_dict(),
         "build_script_toolchains": attr.label_list(),
         "rustc_flags": attr.string_list(),
-        "proc_macro_deps": attr.string_list(default = []),
-        "proc_macro_build_deps": attr.string_list(default = []),
         "data": attr.label_list(default = []),
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),

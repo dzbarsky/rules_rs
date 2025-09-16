@@ -1,29 +1,26 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script", "cargo_toml_env_vars")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
+load("//rs/private:rust_deps.bzl", "rust_deps")
 
 def rust_crate(
-    name,
-    crate_name,
-    version,
-    aliases,
-    deps,
-    extra_deps,
-    data,
-    proc_macro_deps, # TODO(zbarsky): Remove this
-    crate_features,
-    crate_root,
-    edition,
-    rustc_flags,
-    target_compatible_with,
-    links,
-    build_script,
-    build_script_data,
-    build_deps,
-    build_script_env,
-    build_script_toolchains,
-    proc_macro_build_deps, # TODO(zbarsky): remove this
-    is_proc_macro,
-):
+        name,
+        crate_name,
+        version,
+        aliases,
+        deps,
+        data,
+        crate_features,
+        crate_root,
+        edition,
+        rustc_flags,
+        target_compatible_with,
+        links,
+        build_script,
+        build_script_data,
+        build_deps,
+        build_script_env,
+        build_script_toolchains,
+        is_proc_macro):
     compile_data = native.glob(
         include = ["**"],
         allow_empty = True,
@@ -57,7 +54,18 @@ def rust_crate(
         src = "Cargo.toml",
     )
 
-    if name != "libduckdb-sys" and build_script:
+    if build_script:
+        rust_deps(
+            name = "_bs_deps",
+            deps = build_deps,
+        )
+
+        rust_deps(
+            name = "_bs_proc_macro_deps",
+            deps = build_deps,
+            proc_macros = True,
+        )
+
         cargo_build_script(
             name = "_bs",
             compile_data = native.glob(
@@ -78,11 +86,11 @@ def rust_crate(
             crate_root = build_script,
             links = links,
             data = compile_data + build_script_data,
-            deps = build_deps,
+            deps = [":_bs_deps"],
             link_deps = deps,
             build_script_env = build_script_env,
             toolchains = build_script_toolchains,
-            proc_macro_deps = proc_macro_build_deps,
+            proc_macro_deps = [":_bs_proc_macro_deps"],
             edition = edition,
             pkg_name = crate_name,
             rustc_env_files = [":cargo_toml_env_vars"],
@@ -99,6 +107,17 @@ def rust_crate(
 
     rule = rust_proc_macro if is_proc_macro else rust_library
 
+    rust_deps(
+        name = "deps",
+        deps = deps,
+    )
+
+    rust_deps(
+        name = "proc_macro_deps",
+        deps = deps,
+        proc_macros = True,
+    )
+
     rule(
         name = name,
         crate_name = crate_name,
@@ -106,9 +125,9 @@ def rust_crate(
         srcs = srcs,
         compile_data = compile_data,
         aliases = aliases,
-        deps = deps + extra_deps + maybe_build_script,
+        deps = [":deps"] + maybe_build_script,
         data = data,
-        proc_macro_deps = proc_macro_deps,
+        proc_macro_deps = [":proc_macro_deps"],
         crate_features = crate_features,
         crate_root = crate_root,
         edition = edition,
@@ -118,4 +137,3 @@ def rust_crate(
         target_compatible_with = target_compatible_with,
         visibility = ["//visibility:public"],
     )
-

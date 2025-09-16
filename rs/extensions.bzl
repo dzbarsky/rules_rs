@@ -10,117 +10,6 @@ load(
 )
 load("//rs/private:semver.bzl", "select_matching_version")
 
-# TODO(zbarsky): Don't see any way in the API response to determine if a crate is a proc_macro :(
-# We only find out once we download the Cargo.toml, which is inside the spoke repo, which is too late.
-# For now just hardcode it; try to get crates.io fixed to tell us
-_PROC_MACROS = set([
-    "arg_enum_proc_macro",
-    "arrow_convert_derive",
-    "asn1-rs-derive",
-    "asn1-rs-impl",
-    "async-attributes",
-    "curve25519-dalek-derive",
-    "async-generic",
-    "async-recursion",
-    "async-stream-impl",
-    "async-trait",
-    "auto_enums",
-    "axum-macros",
-    "biscuit-quote",
-    "bytecheck_derive",
-    "cached_proc_macro",
-    "clap_derive",
-    "clap_derive",
-    "clickhouse-derive",
-    "const-random-macro",
-    "const_fn",
-    "ctor-proc-macro",
-    "cxxbridge-macro",
-    "darling_macro",
-    "data-encoding-macro-internal",
-    "delegate",
-    "derivative",
-    "derive-new ",
-    "derive-new",
-    "derive_builder_macro",
-    "derive_more",
-    "derive_more-impl",
-    "displaydoc",
-    "document-features",
-    "enum-as-inner",
-    "enum_dispatch",
-    "enumflags2_derive",
-    "equator-macro",
-    "err-derive",
-    "failure_derive",
-    "fix-hidden-lifetime-bug-proc_macros",
-    "foreign-types-macros",
-    "futures-macro",
-    "indoc",
-    "macro_rules_attribute-proc_macro",
-    "maybe-async",
-    "mockall_derive",
-    "monostate-impl",
-    "nalgebra-macros",
-    "neli-proc-macros",
-    "noop_proc_macro",
-    "num-derive",
-    "openssl-macros",
-    "paste",
-    "pest_derive",
-    "phf_macros",
-    "pin-project-internal",
-    "proc-macro-error-attr",
-    "proc-macro-error-attr2",
-    "proc-macro-hack",
-    "profiling-procmacros",
-    "prost-derive",
-    "prost-reflect-derive",
-    "ptr_meta_derive",
-    "pyo3-async-runtimes-macros",
-    "pyo3-macros",
-    "pyo3-stub-gen-derive",
-    "rasn-derive",
-    "ref-cast-impl",
-    "rkyv_derive",
-    "rustversion",
-    "sealed",
-    "seq-macro",
-    "serde_derive",
-    "serde_repr",
-    "serde_with_macros",
-    "serial_test_derive",
-    "simd_helpers",
-    "snafu-derive",
-    "static-iref",
-    "static-regular-grammar",
-    "stdweb-derive",
-    "stdweb-internal-macros",
-    "strum_macros",
-    "test-case-macros",
-    "test-log-macros",
-    "thiserror-impl",
-    "time-macros",
-    "time-macros-impl",
-    "tokio-macros",
-    "tracing-attributes",
-    "traitful",
-    "typed-builder-macro",
-    "typespec_macros",
-    "validator_derive",
-    "valuable-derive",
-    "wasm-bindgen-macro",
-    "windows-implement",
-    "windows-interface",
-    "wstd-macro",
-    "yoke-derive",
-    "zbus_macros",
-    "zerofrom-derive",
-    "zeroize_derive",
-    "zerovec-derive",
-    "zvariant_derive",
-])
-
 _DEFAULT_CRATE_ANNOTATION = struct(
     gen_build_script = "auto",
     build_script_data = [],
@@ -131,11 +20,6 @@ _DEFAULT_CRATE_ANNOTATION = struct(
     crate_features = [],
     rustc_flags = [],
 )
-
-_PROC_MACROS_EXCEPTIONS = {
-    "derive_more": ["2.0.1"],
-    "time-macros": ["0.1.1"],
-}
 
 def _spoke_repo(hub_name, name, version):
     s = "%s__%s-%s" % (hub_name, name, version)
@@ -185,8 +69,6 @@ def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possi
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
-        proc_macro_deps = set(),
-        proc_macro_build_deps = set(),
         deps = {triple: set() for triple in triples},
         aliases = {triple: dict() for triple in triples},
 
@@ -203,8 +85,6 @@ def _count(feature_resolutions_by_fq_crate):
             n += len(features)
 
         n += len(feature_resolutions.build_deps)
-        n += len(feature_resolutions.proc_macro_deps)
-        n += len(feature_resolutions.proc_macro_build_deps)
         for deps in feature_resolutions.deps.values():
             n += len(deps)
 
@@ -220,8 +100,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
         aliases = feature_resolutions.aliases
 
         build_deps = feature_resolutions.build_deps
-        proc_macro_build_deps = feature_resolutions.proc_macro_build_deps
-        proc_macro_deps = feature_resolutions.proc_macro_deps
 
         possible_dep_fq_crate_by_name = feature_resolutions.possible_dep_fq_crate_by_name
 
@@ -244,10 +122,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # Bail early if feature is maximally enabled.
                 continue
 
-            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-            proc_macro = dep_name in _PROC_MACROS and dep_fq.removeprefix(dep_name)[1:] not in _PROC_MACROS_EXCEPTIONS.get(dep_name, [])
-            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
-
             match = dep.get("target")
 
             enabled = not dep.get("optional", False)
@@ -260,23 +134,20 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 continue
 
             if kind == "build":
-                if proc_macro:
-                    proc_macro_build_deps.add(bazel_target)
-                else:
-                    build_deps.add(bazel_target)
+                build_deps.add(bazel_target)
                 continue
 
             if all(match.values()):
                 match = {_ALL_PLATFORMS: True}
 
+            dep_fq = possible_dep_fq_crate_by_name[dep_name]
+            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+
             for triple, matched in match.items():
                 if not matched:
                     continue
 
-                if proc_macro:
-                    proc_macro_deps.add(bazel_target)
-                else:
-                    deps[triple].add(bazel_target)
+                deps[triple].add(bazel_target)
 
                 if dep_name != dep_alias:
                     aliases[triple][bazel_target] = dep_alias.replace("-", "_")
@@ -731,8 +602,6 @@ def _generate_hub_and_spokes(
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
             rustc_flags = annotation.rustc_flags,
-            proc_macro_deps = sorted(feature_resolutions.proc_macro_deps),
-            proc_macro_build_deps = sorted(feature_resolutions.proc_macro_build_deps),
             data = annotation.data,
             deps = sorted(all_platform_deps | set(annotation.deps)),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
