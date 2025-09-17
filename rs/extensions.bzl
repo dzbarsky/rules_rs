@@ -8,7 +8,6 @@ load(
     "prune_cargo_toml_json",
     "run_toml2json",
 )
-load("//rs/private:semver.bzl", "select_matching_version")
 
 _DEFAULT_CRATE_ANNOTATION = struct(
     gen_build_script = "auto",
@@ -88,9 +87,7 @@ def _count(feature_resolutions_by_fq_crate):
         for deps in feature_resolutions.deps.values():
             n += len(deps)
 
-        for aliases in feature_resolutions.aliases.values():
-            n += len(aliases)
-
+        # No need to count aliases, they only get set when deps are set.
     return n
 
 def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
@@ -276,6 +273,7 @@ def _generate_hub_and_spokes(
     facts = {}
 
     # Ignore workspace members
+    workspace_members = [p for p in cargo_lock["package"] if "source" not in p]
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
     download_tokens = []
@@ -359,14 +357,7 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        possible_dep_fq_crate_by_name = {}
-        for dep in package.get("dependencies", []):
-            if " " not in dep:
-                # Only one version
-                resolved_version = versions_by_name[dep][0]
-            else:
-                dep, resolved_version = dep.split(" ")
-            possible_dep_fq_crate_by_name[dep] = _fq_crate(dep, resolved_version)
+        possible_dep_fq_crate_by_name = _compute_package_fq_deps(package, versions_by_name)
 
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             key = name + "_" + version
@@ -517,26 +508,25 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "set up resolutions")
 
-    workspace_deps = set()
+    workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
+    workspace_deps = set()
     # Set initial set of features from Cargo.tomls
     for package in cargo_metadata["packages"]:
+        fq_deps = workspace_fq_deps[package["name"]]
+
         for dep in package["dependencies"]:
             if dep["source"] != "registry+https://github.com/rust-lang/crates.io-index":
                 continue
             name = dep["name"]
             workspace_deps.add(name)
-            versions = versions_by_name[name]
-            version = select_matching_version(dep["req"], versions)
-            if not version:
-                fail("Could not solve version for %s %s among %s" % (name, dep["req"], versions))
 
             features = dep["features"]
             if dep["uses_default_features"]:
                 features.append("default")
 
             # Assume we could build top-level dep on any platform.
-            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
+            feature_resolutions = feature_resolutions_by_fq_crate[fq_deps[name]]
             feature_resolutions.features_enabled[_ALL_PLATFORMS].update(features)
             feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
 
@@ -696,6 +686,37 @@ filegroup(
     )
 
     return facts
+
+def _compute_package_fq_deps(package, versions_by_name, strict = True):
+    possible_dep_fq_crate_by_name = {}
+
+    for maybe_fq_dep in package.get("dependencies", []):
+        idx = maybe_fq_dep.find(" ")
+        if idx == -1:
+            # Only one version
+            versions = versions_by_name.get(maybe_fq_dep)
+            if not versions:
+                if strict:
+                    fail("Malformed lockfile?")
+                continue
+            dep = maybe_fq_dep
+            resolved_version = versions[0]
+        else:
+            dep = maybe_fq_dep[:idx]
+            resolved_version = maybe_fq_dep[idx + 1:]
+
+        possible_dep_fq_crate_by_name[dep] = _fq_crate(dep, resolved_version)
+
+    return possible_dep_fq_crate_by_name
+
+def _compute_workspace_fq_deps(workspace_members, versions_by_name):
+    workspace_fq_deps = {}
+
+    for workspace_member in workspace_members:
+        fq_deps = _compute_package_fq_deps(workspace_member, versions_by_name, strict = False)
+        workspace_fq_deps[workspace_member["name"]] = fq_deps
+
+    return workspace_fq_deps
 
 def _crate_impl(mctx):
     facts = {}
