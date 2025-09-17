@@ -34,17 +34,17 @@ def _select(platform_items, default = []):
 
     for triple, items in platform_items.items():
         if items:
-            branches.append((_platform(triple), sorted(items) if type(items) == "set" else items))
+            branches.append((_platform(triple), repr(sorted(items) if type(items) == "set" else items)))
 
     if not branches:
         return ""
 
-    branches.append(("//conditions:default", default))
+    branches.append(("//conditions:default", repr(default)))
 
     return """select({
         %s
     })""" % (
-        ",\n        ".join(['"%s": %s' % (condition, repr(data)) for (condition, data) in branches])
+        ",\n        ".join(['"%s": %s' % branch for branch in branches])
     )
 
 def _add_to_dict(d, k, v):
