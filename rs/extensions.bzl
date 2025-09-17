@@ -91,6 +91,8 @@ def _count(feature_resolutions_by_fq_crate):
     return n
 
 def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
+    changed = False
+
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
         deps = feature_resolutions.deps
@@ -131,7 +133,9 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 continue
 
             if kind == "build":
-                build_deps.add(bazel_target)
+                if changed or bazel_target not in build_deps:
+                    changed = True
+                    build_deps.add(bazel_target)
                 continue
 
             if all(match.values()):
@@ -144,27 +148,40 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 if not matched:
                     continue
 
-                deps[triple].add(bazel_target)
+                triple_deps = deps[triple]
+                if changed or bazel_target not in triple_deps:
+                    changed = True
+                    triple_deps.add(bazel_target)
 
                 if dep_name != dep_alias:
                     aliases[triple][bazel_target] = dep_alias.replace("-", "_")
 
                 dep_feature_resolutions.triples_compatible_with.add(triple)
                 triple_features = dep_feature_resolutions.features_enabled[triple]
+
+                prev_length = 0 if changed else len(triple_features)
                 triple_features.update(dep.get("features", []))
                 if dep.get("default_features", True):
                     triple_features.add("default")
+                curr_length = 0 if changed else len(triple_features)
+                if prev_length != curr_length:
+                    changed = True
 
-        _propagate_feature_enablement(
+        if _propagate_feature_enablement(
+            changed,
             fq_crate,
             features_enabled,
             feature_resolutions,
             feature_resolutions_by_fq_crate,
             possible_dep_fq_crate_by_name,
             debug,
-        )
+        ):
+            changed = True
+
+    return changed
 
 def _propagate_feature_enablement(
+        changed,
         fq_crate,
         features_enabled,
         feature_resolutions,
@@ -179,7 +196,10 @@ def _propagate_feature_enablement(
             for feature in possible_features.get(enabled_feature, []):
                 idx = feature.find("/")
                 if idx == -1:
-                    feature_set.add(feature.removeprefix("dep:"))
+                    feature = feature.removeprefix("dep:")
+                    if changed or feature not in feature_set:
+                        changed = True
+                        feature_set.add(feature)
                     continue
 
                 dep_name = feature[:idx]
@@ -189,7 +209,9 @@ def _propagate_feature_enablement(
                     dep_name = dep_name[:-1]
                 else:
                     # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
-                    feature_set.add(dep_name)
+                    if changed or dep_name not in feature_set:
+                        changed = True
+                        feature_set.add(dep_name)
 
                 dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
                 if not dep_fq:
@@ -205,7 +227,12 @@ def _propagate_feature_enablement(
                         print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
                     continue
 
-                feature_resolutions_by_fq_crate[dep_fq].features_enabled[triple].add(dep_feature)
+                triple_features = feature_resolutions_by_fq_crate[dep_fq].features_enabled[triple]
+                if changed or dep_feature not in triple_features:
+                    changed = True
+                    triple_features.add(dep_feature)
+
+    return changed
 
 def _parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
@@ -343,7 +370,6 @@ def _generate_hub_and_spokes(
         if not result.success:
             fail("Could not download")
 
-    matches_all_triples = {triple: True for triple in platform_triples}
     platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
 
     _date(mctx, "got tokens")
@@ -351,6 +377,10 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Computing dependencies and features")
 
     feature_resolutions_by_fq_crate = dict()
+
+    cfg_match_cache = {
+        None: {triple: True for triple in platform_triples},
+    }
 
     for package in packages:
         name = package["name"]
@@ -400,8 +430,6 @@ def _generate_hub_and_spokes(
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
         else:
-            _date(mctx, "start parse " + name + source)
-
             key = source + "_" + name
             fact = facts.get(key)
             if fact:
@@ -476,8 +504,6 @@ def _generate_hub_and_spokes(
                 # Nest a serialized JSON since max path depth is 5.
                 facts[key] = json.encode(fact)
 
-            _date(mctx, "end parse " + name)
-
             package["strip_prefix"] = fact["strip_prefix"]
             package["cargo_toml_json"] = fact["cargo_toml_json"]
 
@@ -485,12 +511,6 @@ def _generate_hub_and_spokes(
         possible_deps = [dep for dep in fact["dependencies"] if dep.get("kind") != "dev"]
 
         for dep in possible_deps:
-            target = dep.get("target")
-            if target:
-                dep["target"] = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-            else:
-                dep["target"] = matches_all_triples
-
             dep_name = dep.get("package")
             if not dep_name:
                 dep_name = dep["name"]
@@ -502,6 +522,14 @@ def _generate_hub_and_spokes(
 
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
 
+            target = dep.get("target")
+            match = cfg_match_cache.get(target)
+            if not match:
+                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+                cfg_match_cache[target] = match
+
+            dep["target"] = match
+
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
         )
@@ -511,6 +539,7 @@ def _generate_hub_and_spokes(
     workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
     workspace_deps = set()
+
     # Set initial set of features from Cargo.tomls
     for package in cargo_metadata["packages"]:
         fq_deps = workspace_fq_deps[package["name"]]
@@ -533,24 +562,14 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     # Do some rounds of mutual resolution; bail when no more changes
-    # Resolution process always enables new crates/features so we can just count total enabled
-    # instead of being careful about change tracking.
-    initial_count = 0
-    for i in range(10):
+    for i in range(20):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug)
-
-        count = _count(feature_resolutions_by_fq_crate)
-        if debug:
-            print("Got count", count)
-
-        _date(mctx, "Round " + str(i))
-
-        if count == initial_count:
+        if not _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
+            if debug:
+                count = _count(feature_resolutions_by_fq_crate)
+                print("Got count", count)
             break
-
-        initial_count = count
 
     mctx.report_progress("Initializing spokes")
 
@@ -735,7 +754,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(50):
+                for _ in range(150):
                     _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
