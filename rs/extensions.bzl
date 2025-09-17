@@ -60,15 +60,24 @@ _ALL_PLATFORMS = "*"
 
 def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples):
     triples = platform_triples + [_ALL_PLATFORMS]
+    features_enabled = {triple: set() for triple in triples}
+    deps = {triple: set() for triple in triples}
+
     return struct(
-        features_enabled = {triple: set() for triple in triples},
+        features_enabled = features_enabled,
+        # Fast-path for access
+        features_enabled_for_all_platforms = features_enabled[_ALL_PLATFORMS],
 
         # If set, we will set `target_compatible_with`. If have "*" that means all.
         triples_compatible_with = set(),
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
-        deps = {triple: set() for triple in triples},
+
+        deps = deps,
+        # Fast-path for access
+        deps_all_platforms = deps[_ALL_PLATFORMS],
+
         aliases = {triple: dict() for triple in triples},
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
@@ -95,77 +104,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
         features_enabled = feature_resolutions.features_enabled
-        deps = feature_resolutions.deps
-        aliases = feature_resolutions.aliases
+        features_enabled_for_all_platforms = feature_resolutions.features_enabled_for_all_platforms
 
-        build_deps = feature_resolutions.build_deps
+        deps = feature_resolutions.deps
+        deps_all_platforms = feature_resolutions.deps_all_platforms
 
         possible_dep_fq_crate_by_name = feature_resolutions.possible_dep_fq_crate_by_name
-
-        # Propagate features across currently enabled dependencies.
-        for dep in feature_resolutions.possible_deps:
-            if "package" in dep:
-                dep_name = dep["package"]
-                dep_alias = dep["name"]
-            else:
-                dep_name = dep["name"]
-                dep_alias = dep_name
-
-            bazel_target = dep.get("bazel_target")
-            if not bazel_target:
-                # print("NOT FOUND", dep)
-                continue
-
-            kind = dep.get("kind", "normal")
-            if kind == "normal" and bazel_target in deps[_ALL_PLATFORMS]:
-                # Bail early if feature is maximally enabled.
-                continue
-
-            match = dep.get("target")
-
-            enabled = not dep.get("optional", False)
-            if not enabled:
-                for triple, feature_set in features_enabled.items():
-                    if (triple == _ALL_PLATFORMS or match[triple]) and dep_alias in feature_set:
-                        enabled = True
-                        break
-            if not enabled:
-                continue
-
-            if kind == "build":
-                if changed or bazel_target not in build_deps:
-                    changed = True
-                    build_deps.add(bazel_target)
-                continue
-
-            if all(match.values()):
-                match = {_ALL_PLATFORMS: True}
-
-            dep_fq = possible_dep_fq_crate_by_name[dep_name]
-            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
-
-            for triple, matched in match.items():
-                if not matched:
-                    continue
-
-                triple_deps = deps[triple]
-                if changed or bazel_target not in triple_deps:
-                    changed = True
-                    triple_deps.add(bazel_target)
-
-                if dep_name != dep_alias:
-                    aliases[triple][bazel_target] = dep_alias.replace("-", "_")
-
-                dep_feature_resolutions.triples_compatible_with.add(triple)
-                triple_features = dep_feature_resolutions.features_enabled[triple]
-
-                prev_length = 0 if changed else len(triple_features)
-                triple_features.update(dep.get("features", []))
-                if dep.get("default_features", True):
-                    triple_features.add("default")
-                curr_length = 0 if changed else len(triple_features)
-                if prev_length != curr_length:
-                    changed = True
 
         if _propagate_feature_enablement(
             changed,
@@ -177,6 +121,59 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             debug,
         ):
             changed = True
+
+        # Propagate features across currently enabled dependencies.
+        for dep in feature_resolutions.possible_deps:
+            bazel_target = dep.get("bazel_target")
+            if not bazel_target:
+                # print("NOT FOUND", dep)
+                continue
+
+            kind = dep.get("kind", "normal")
+            if kind == "normal" and bazel_target in deps_all_platforms:
+                # Bail early if feature is maximally enabled.
+                continue
+
+            if kind == "build":
+                build_deps = feature_resolutions.build_deps
+                if changed or bazel_target not in build_deps:
+                    changed = True
+                    build_deps.add(bazel_target)
+                continue
+
+            if "package" in dep:
+                dep_name = dep["package"]
+                dep_alias = dep["name"]
+            else:
+                dep_name = dep["name"]
+                dep_alias = dep_name
+
+            dep_fq = possible_dep_fq_crate_by_name[dep_name]
+            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+
+            disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms
+
+            for triple in dep["target"]:
+                if disabled_on_all_platforms and (triple == _ALL_PLATFORMS or dep_alias not in features_enabled[triple]):
+                    continue
+
+                triple_deps = deps[triple]
+                if changed or bazel_target not in triple_deps:
+                    changed = True
+                    triple_deps.add(bazel_target)
+
+                if dep_name != dep_alias:
+                    feature_resolutions.aliases[triple][bazel_target] = dep_alias.replace("-", "_")
+
+                dep_feature_resolutions.triples_compatible_with.add(triple)
+                triple_features = dep_feature_resolutions.features_enabled[triple]
+
+                prev_length = 0 if changed else len(triple_features)
+                triple_features.update(dep.get("features", []))
+                if dep.get("default_features", True):
+                    triple_features.add("default")
+                if not changed and prev_length != len(triple_features):
+                    changed = True
 
     return changed
 
@@ -191,9 +188,16 @@ def _propagate_feature_enablement(
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in features_enabled.items():
+        if not feature_set:
+            continue
+
         # Enable any features that are implied by previously-enabled features.
         for enabled_feature in list(feature_set):
-            for feature in possible_features.get(enabled_feature, []):
+            enables = possible_features.get(enabled_feature)
+            if not enables:
+                continue
+
+            for feature in enables:
                 idx = feature.find("/")
                 if idx == -1:
                     feature = feature.removeprefix("dep:")
@@ -378,9 +382,8 @@ def _generate_hub_and_spokes(
 
     feature_resolutions_by_fq_crate = dict()
 
-    cfg_match_cache = {
-        None: {triple: True for triple in platform_triples},
-    }
+    match_all = [_ALL_PLATFORMS]
+    cfg_match_cache = { None: match_all }
 
     for package in packages:
         name = package["name"]
@@ -526,6 +529,8 @@ def _generate_hub_and_spokes(
             match = cfg_match_cache.get(target)
             if not match:
                 match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+                if len(match) == len(platform_cfg_attrs):
+                    match = match_all
                 cfg_match_cache[target] = match
 
             dep["target"] = match
@@ -568,7 +573,7 @@ def _generate_hub_and_spokes(
         if not _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
-                print("Got count", count)
+                print("Got count", count, "in", i, "rounds")
             break
 
     mctx.report_progress("Initializing spokes")
