@@ -326,7 +326,8 @@ def _generate_hub_and_spokes(
                 continue
 
             # TODO(zbarsky): dedupe fetches when multiple versions?
-            url = "https://raw.githubusercontent.com/rust-lang/crates.io-index/master/" + _sharded_path(name)
+            # TODO(zbarsky): Support custom registries
+            url = "https://index.crates.io/" + _sharded_path(name)
             token = mctx.download(
                 url,
                 key + ".jsonl",
@@ -335,6 +336,7 @@ def _generate_hub_and_spokes(
             )
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
+            # TODO(zbarsky): Support other forges
             key = source + "_" + name
             fact = existing_facts.get(key)
             if fact:
@@ -354,9 +356,7 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "kicked off downloads")
 
-    # TODO(zbarsky): Not sure why we need this weird hack to get `/bin/` into the path...
-    cargo = mctx.path(Label("@rs_rust_host_tools//:cargo"))
-    cargo = cargo.dirname.get_child("bin/cargo")
+    cargo = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
     result = mctx.execute(
         [cargo, "metadata", "--no-deps", "--format-version=1", "--quiet"],
         working_directory = str(mctx.path(cargo_lock_path).dirname),
