@@ -73,11 +73,9 @@ def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possi
 
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
-
         deps = deps,
         # Fast-path for access
         deps_all_platforms = deps[_ALL_PLATFORMS],
-
         aliases = {triple: dict() for triple in triples},
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
@@ -131,22 +129,39 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 # Bail early if feature is maximally enabled.
                 continue
 
-            if kind == "build":
-                if not bazel_target:
-                    # print("Build dep not found %s" % dep)
-                    continue
-                build_deps = feature_resolutions.build_deps
-                if changed or bazel_target not in build_deps:
-                    changed = True
-                    build_deps.add(bazel_target)
-                continue
-
             if "package" in dep:
                 dep_name = dep["package"]
                 dep_alias = dep["name"]
             else:
                 dep_name = dep["name"]
                 dep_alias = dep_name
+
+            if kind == "build":
+                if not bazel_target:
+                    # print("Build dep not found %s" % dep)
+                    continue
+
+                # TODO(zbarsky): Do we care about per-platform build deps?
+
+                build_deps = feature_resolutions.build_deps
+                if changed or bazel_target not in build_deps:
+                    changed = True
+                    build_deps.add(bazel_target)
+
+                features = dep.get("features", [])
+                if features:
+                    dep_fq = possible_dep_fq_crate_by_name[dep_name]
+                    dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+                    dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
+
+                    prev_length = 0 if changed else len(dep_features)
+                    dep_features.update(features)
+                    if dep.get("default_features", True):
+                        dep_features.add("default")
+                    if not changed and prev_length != len(dep_features):
+                        changed = True
+
+                continue
 
             if bazel_target:
                 dep_fq = possible_dep_fq_crate_by_name[dep_name]
@@ -387,7 +402,7 @@ def _generate_hub_and_spokes(
     feature_resolutions_by_fq_crate = dict()
 
     match_all = [_ALL_PLATFORMS]
-    cfg_match_cache = { None: match_all }
+    cfg_match_cache = {None: match_all}
 
     for package in packages:
         name = package["name"]
@@ -516,14 +531,15 @@ def _generate_hub_and_spokes(
 
         possible_features = fact["features"]
         possible_deps = [
-            dep for dep in fact["dependencies"]
+            dep
+            for dep in fact["dependencies"]
             if dep.get("kind") != "dev" and
-            dep.get("package") not in [
-                # Internal rustc placeholder crates.
-                "rustc-std-workspace-alloc",
-                "rustc-std-workspace-core",
-                "rustc-std-workspace-std",
-            ]
+               dep.get("package") not in [
+                   # Internal rustc placeholder crates.
+                   "rustc-std-workspace-alloc",
+                   "rustc-std-workspace-core",
+                   "rustc-std-workspace-std",
+               ]
         ]
 
         for dep in possible_deps:
@@ -546,7 +562,6 @@ def _generate_hub_and_spokes(
                 continue
 
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
-
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)

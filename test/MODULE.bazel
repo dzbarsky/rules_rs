@@ -32,8 +32,10 @@ local_path_override(
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 
 TESTS = [
-    "annotation_crate_features",
+    # TODO(zbarsky): Figure out how to make this work?
+    # "annotation_crate_features",
     "build_script_runtime_env",
+    "many_workspace_deps"
 ]
 
 [

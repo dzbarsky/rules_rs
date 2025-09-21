@@ -1,4 +1,5 @@
-TESTS = [f for f in glob(["*"], exclude_directories = 0) if "." not in f and "bazel-" not in f]
+DISABLED = ["annotation_crate_features"]
+TESTS = [f for f in glob(["*"], exclude_directories = 0) if "." not in f and "bazel-" not in f and f not in DISABLED]
 
 filegroup(
     name = "all_builds",

@@ -1,0 +1,20 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+actix-web = "4.11.0"
+axum = "0.8.4"
+bindgen = "0.72.1"
+css = "0.0.22"
+datafusion = "50.0.0"
+diesel = "2.3.2"
+oxc = "0.90.0"
+reqwest = "0.12.23"
+swc = "40.0.0"
+warp = "0.4.2"
+
+
