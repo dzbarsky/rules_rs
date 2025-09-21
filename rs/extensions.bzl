@@ -125,16 +125,16 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
             bazel_target = dep.get("bazel_target")
-            if not bazel_target:
-                # print("NOT FOUND", dep)
-                continue
 
             kind = dep.get("kind", "normal")
-            if kind == "normal" and bazel_target in deps_all_platforms:
+            if kind == "normal" and bazel_target and bazel_target in deps_all_platforms:
                 # Bail early if feature is maximally enabled.
                 continue
 
             if kind == "build":
+                if not bazel_target:
+                    # print("Build dep not found %s" % dep)
+                    continue
                 build_deps = feature_resolutions.build_deps
                 if changed or bazel_target not in build_deps:
                     changed = True
@@ -148,14 +148,22 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_name = dep["name"]
                 dep_alias = dep_name
 
-            dep_fq = possible_dep_fq_crate_by_name[dep_name]
-            dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+            if dep_name == "rustc-std-workspace-alloc":
+                # Internal rustc placeholder crate.
+                continue
+
+            if bazel_target:
+                dep_fq = possible_dep_fq_crate_by_name[dep_name]
+                dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
             disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms
 
             for triple in dep["target"]:
                 if disabled_on_all_platforms and (triple == _ALL_PLATFORMS or dep_alias not in features_enabled[triple]):
                     continue
+
+                if not bazel_target:
+                    fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
 
                 triple_deps = deps[triple]
                 if changed or bazel_target not in triple_deps:
@@ -518,13 +526,6 @@ def _generate_hub_and_spokes(
             if not dep_name:
                 dep_name = dep["name"]
 
-            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-            if not dep_fq:
-                # print("NOT FOUND", dep)
-                continue
-
-            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
-
             target = dep.get("target")
             match = cfg_match_cache.get(target)
             if not match:
@@ -532,8 +533,15 @@ def _generate_hub_and_spokes(
                 if len(match) == len(platform_cfg_attrs):
                     match = match_all
                 cfg_match_cache[target] = match
-
             dep["target"] = match
+
+            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+            if not dep_fq:
+                # print("NOT FOUND", dep)
+                continue
+
+            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
             _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
@@ -561,8 +569,14 @@ def _generate_hub_and_spokes(
 
             # Assume we could build top-level dep on any platform.
             feature_resolutions = feature_resolutions_by_fq_crate[fq_deps[name]]
-            feature_resolutions.features_enabled[_ALL_PLATFORMS].update(features)
+            feature_resolutions.features_enabled_for_all_platforms.update(features)
             feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
+
+    # Set initial set of features from annotations
+    for crate, annotation in annotations.items():
+        if annotation.crate_features:
+            for version in versions_by_name[crate]:
+                feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled_for_all_platforms.update(annotation.crate_features)
 
     _date(mctx, "set up initial deps!")
 
