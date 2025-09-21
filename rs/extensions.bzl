@@ -148,10 +148,6 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_name = dep["name"]
                 dep_alias = dep_name
 
-            if dep_name == "rustc-std-workspace-alloc":
-                # Internal rustc placeholder crate.
-                continue
-
             if bazel_target:
                 dep_fq = possible_dep_fq_crate_by_name[dep_name]
                 dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
@@ -519,7 +515,16 @@ def _generate_hub_and_spokes(
             package["cargo_toml_json"] = fact["cargo_toml_json"]
 
         possible_features = fact["features"]
-        possible_deps = [dep for dep in fact["dependencies"] if dep.get("kind") != "dev"]
+        possible_deps = [
+            dep for dep in fact["dependencies"]
+            if dep.get("kind") != "dev" and
+            dep.get("package") not in [
+                # Internal rustc placeholder crates.
+                "rustc-std-workspace-alloc",
+                "rustc-std-workspace-core",
+                "rustc-std-workspace-std",
+            ]
+        ]
 
         for dep in possible_deps:
             dep_name = dep.get("package")
