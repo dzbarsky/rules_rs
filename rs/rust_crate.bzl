@@ -23,20 +23,22 @@ def rust_crate(
         is_proc_macro):
     compile_data = native.glob(
         include = ["**"],
-        allow_empty = True,
         exclude = [
             "**/* *",
             ".tmp_git_root/**/*",
             "BUILD",
             "BUILD.bazel",
+            "REPO.bazel",
+            "Cargo.toml.orig",
             "WORKSPACE",
             "WORKSPACE.bazel",
         ],
+        allow_empty = True,
     )
 
     srcs = native.glob(
-        allow_empty = True,
         include = ["**/*.rs"],
+        allow_empty = True,
     )
 
     tags = [
@@ -68,19 +70,7 @@ def rust_crate(
 
         cargo_build_script(
             name = "_bs",
-            compile_data = native.glob(
-                include = ["**"],
-                allow_empty = True,
-                exclude = [
-                    "**/* *",
-                    "**/*.rs",
-                    ".tmp_git_root/**/*",
-                    "BUILD",
-                    "BUILD.bazel",
-                    "WORKSPACE",
-                    "WORKSPACE.bazel",
-                ],
-            ),
+            compile_data = compile_data,
             crate_features = crate_features,
             crate_name = "build_script_build",
             crate_root = build_script,

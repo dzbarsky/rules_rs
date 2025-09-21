@@ -1,0 +1,3 @@
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --repo_contents_cache=~/bazel_repo_contents_cache
+common --disk_cache=~/bazel_cache

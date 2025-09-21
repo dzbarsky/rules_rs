@@ -1,0 +1,6 @@
+TESTS = [f for f in glob(["*"], exclude_directories = 0) if "." not in f and "bazel-" not in f]
+
+filegroup(
+    name = "all_builds",
+    srcs = ["@%s//:_workspace_deps"  % test for test in TESTS],
+)

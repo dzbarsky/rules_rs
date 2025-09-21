@@ -1,0 +1,10 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+rustls = {version = "0.23.32", default-features = false}
+

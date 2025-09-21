@@ -669,7 +669,6 @@ def _generate_hub_and_spokes(
 alias(
     name = "{name}-{version}",
     actual = "@{spoke_repo}//:{name}",
-    visibility = ["//visibility:public"],
 )""".format(
                 name = name,
                 version = version,
@@ -680,7 +679,6 @@ alias(
 alias(
     name = "{name}",
     actual = ":{name}-{version}",
-    visibility = ["//visibility:public"],
 )""".format(
             name = name,
             # TODO(zbarsky): Select max version?
@@ -689,6 +687,10 @@ alias(
 
     hub_contents.append(
         """
+package(
+    default_visibility = ["//visibility:public"],
+)
+
 filegroup(
     name = "_workspace_deps",
     srcs = [

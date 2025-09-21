@@ -1,0 +1,73 @@
+bazel_dep(name = "toolchains_llvm", version = "1.5.0")
+
+# Configure and register the toolchain.
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+   llvm_version = "16.0.0",
+)
+
+use_repo(llvm, "llvm_toolchain")
+
+register_toolchains("@llvm_toolchain//:all")
+
+bazel_dep(name = "rules_rust", version = "0.65.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    versions = ["1.89.0"],
+)
+
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+bazel_dep(name = "rules_rs", version = "0.0.0")
+
+local_path_override(
+    module_name = "rules_rs",
+    path = "..",
+)
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+
+TESTS = [
+    "annotation_crate_features",
+    "build_script_runtime_env",
+]
+
+[
+    crate.from_cargo(
+        name = test,
+        cargo_lock = "//:%s/Cargo.lock" % test,
+        cargo_toml = "//:%s/Cargo.toml" % test,
+        platform_triples = [
+            "aarch64-apple-darwin",
+            "x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-musl",
+        ],
+    )
+    for test in TESTS
+]
+
+[use_repo(crate, test) for test in TESTS]
+
+crate.annotation(
+    crate = "rav1e",
+    # Needed due to https://github.com/bazelbuild/rules_rust/issues/3625
+    build_script_env = {
+        "CARGO_PKG_AUTHORS": "",
+        "CARGO_PKG_DESCRIPTION": "",
+        "CARGO_PKG_HOMEPAGE": "",
+        "CARGO_PKG_LICENSE": "",
+        "CARGO_PKG_REPOSITORY": "",
+        "RUSTDOC": "",
+    },
+)
+
+crate.annotation(
+    crate = "rustls",
+    repositories = ["annotation_crate_features"],
+    # Test for https://github.com/bazelbuild/rules_rust/issues/3626
+    crate_features = ["fips"],
+)
