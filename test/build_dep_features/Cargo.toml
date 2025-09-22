@@ -1,0 +1,11 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+swc_ecma_preset_env = "34.0.0"
+
+

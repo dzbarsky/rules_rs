@@ -35,6 +35,7 @@ TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
     "build_script_runtime_env",
+    "build_dep_features",
     "many_workspace_deps"
 ]
 
@@ -48,6 +49,7 @@ TESTS = [
             "x86_64-unknown-linux-musl",
             "aarch64-unknown-linux-musl",
         ],
+        #debug = True,
     )
     for test in TESTS
 ]

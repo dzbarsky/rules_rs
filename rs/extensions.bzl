@@ -795,7 +795,7 @@ def _crate_impl(mctx):
             }
 
             if cfg.debug:
-                for _ in range(150):
+                for _ in range(10):
                     _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
