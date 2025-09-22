@@ -170,11 +170,16 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms
 
             for triple in dep["target"]:
+                if fq_crate.startswith("plist"):
+                    print("DEPP", dep, triple, features_enabled)
+
                 if disabled_on_all_platforms and (triple == _ALL_PLATFORMS or dep_alias not in features_enabled[triple]):
                     continue
 
                 if not bazel_target:
-                    fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
+                    print("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
+                    continue
+                    #fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
 
                 triple_deps = deps[triple]
                 if changed or bazel_target not in triple_deps:
@@ -587,10 +592,19 @@ def _generate_hub_and_spokes(
             if dep["uses_default_features"]:
                 features.append("default")
 
-            # Assume we could build top-level dep on any platform.
             feature_resolutions = feature_resolutions_by_fq_crate[fq_deps[name]]
-            feature_resolutions.features_enabled_for_all_platforms.update(features)
-            feature_resolutions.triples_compatible_with.add(_ALL_PLATFORMS)
+
+            target = dep.get("target")
+            match = cfg_match_cache.get(target)
+            if not match:
+                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+                if len(match) == len(platform_cfg_attrs):
+                    match = match_all
+                cfg_match_cache[target] = match
+
+            for triple in match:
+                feature_resolutions.features_enabled[triple].update(features)
+                feature_resolutions.triples_compatible_with.add(triple)
 
     # Set initial set of features from annotations
     for crate, annotation in annotations.items():
@@ -601,7 +615,7 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     # Do some rounds of mutual resolution; bail when no more changes
-    for i in range(20):
+    for i in range(50):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
         if not _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):

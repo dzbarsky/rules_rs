@@ -36,7 +36,8 @@ TESTS = [
     # "annotation_crate_features",
     "build_script_runtime_env",
     "build_dep_features",
-    "many_workspace_deps"
+    "many_workspace_deps",
+    "platform_dep_features",
 ]
 
 [
