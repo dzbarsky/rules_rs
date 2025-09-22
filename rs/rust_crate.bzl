@@ -70,6 +70,7 @@ def rust_crate(
 
         cargo_build_script(
             name = "_bs",
+            aliases = aliases,
             compile_data = compile_data,
             crate_features = crate_features,
             crate_name = "build_script_build",

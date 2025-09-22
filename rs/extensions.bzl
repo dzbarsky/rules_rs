@@ -170,14 +170,11 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
             disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms
 
             for triple in dep["target"]:
-                if fq_crate.startswith("plist"):
-                    print("DEPP", dep, triple, features_enabled)
-
                 if disabled_on_all_platforms and (triple == _ALL_PLATFORMS or dep_alias not in features_enabled[triple]):
                     continue
 
                 if not bazel_target:
-                    print("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
+                    print("Matched %s for %s but it wasn't part of the lockfile! This is unsupported!" % (dep, fq_crate))
                     continue
                     #fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
 
@@ -406,8 +403,9 @@ def _generate_hub_and_spokes(
 
     feature_resolutions_by_fq_crate = dict()
 
-    match_all = [_ALL_PLATFORMS]
-    cfg_match_cache = {None: match_all}
+    # TODO(zbarsky): Figure out how to do this optimization safely.
+    # match_all = [_ALL_PLATFORMS]
+    cfg_match_cache = {None: platform_triples}
 
     for package in packages:
         name = package["name"]
@@ -556,8 +554,9 @@ def _generate_hub_and_spokes(
             match = cfg_match_cache.get(target)
             if not match:
                 match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-                if len(match) == len(platform_cfg_attrs):
-                    match = match_all
+                # TODO(zbarsky): Figure out how to do this optimization safely.
+                #if len(match) == len(platform_cfg_attrs):
+                #    match = match_all
                 cfg_match_cache[target] = match
             dep["target"] = match
 
@@ -598,8 +597,9 @@ def _generate_hub_and_spokes(
             match = cfg_match_cache.get(target)
             if not match:
                 match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-                if len(match) == len(platform_cfg_attrs):
-                    match = match_all
+                # TODO(zbarsky): Figure out how to do this optimization safely.
+                #if len(match) == len(platform_cfg_attrs):
+                #    match = match_all
                 cfg_match_cache[target] = match
 
             for triple in match:

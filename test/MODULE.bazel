@@ -34,6 +34,7 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
+    "build_script_aliases",
     "build_script_runtime_env",
     "build_dep_features",
     "many_workspace_deps",
