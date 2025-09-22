@@ -37,6 +37,7 @@ TESTS = [
     "build_script_aliases",
     "build_script_runtime_env",
     "build_dep_features",
+    "feature_name_overrides_implicit_dep",
     "many_workspace_deps",
     "platform_dep_features",
 ]

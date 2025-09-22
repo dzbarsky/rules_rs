@@ -167,11 +167,17 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 dep_fq = possible_dep_fq_crate_by_name[dep_name]
                 dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
-            disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms
+            prefixed_dep_alias = "dep:" + dep_alias
+            disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
 
             for triple in dep["target"]:
-                if disabled_on_all_platforms and (triple == _ALL_PLATFORMS or dep_alias not in features_enabled[triple]):
-                    continue
+                if disabled_on_all_platforms:
+                    if triple == _ALL_PLATFORMS:
+                        continue
+
+                    features_for_triple = features_enabled[triple]
+                    if dep_alias not in features_for_triple and prefixed_dep_alias not in features_for_triple:
+                        continue
 
                 if not bazel_target:
                     print("Matched %s for %s but it wasn't part of the lockfile! This is unsupported!" % (dep, fq_crate))
@@ -221,7 +227,6 @@ def _propagate_feature_enablement(
             for feature in enables:
                 idx = feature.find("/")
                 if idx == -1:
-                    feature = feature.removeprefix("dep:")
                     if changed or feature not in feature_set:
                         changed = True
                         feature_set.add(feature)
@@ -554,6 +559,7 @@ def _generate_hub_and_spokes(
             match = cfg_match_cache.get(target)
             if not match:
                 match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+
                 # TODO(zbarsky): Figure out how to do this optimization safely.
                 #if len(match) == len(platform_cfg_attrs):
                 #    match = match_all
@@ -597,6 +603,7 @@ def _generate_hub_and_spokes(
             match = cfg_match_cache.get(target)
             if not match:
                 match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+
                 # TODO(zbarsky): Figure out how to do this optimization safely.
                 #if len(match) == len(platform_cfg_attrs):
                 #    match = match_all
