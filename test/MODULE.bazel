@@ -39,6 +39,7 @@ TESTS = [
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
     "many_workspace_deps",
+    "multiple_versions_for_dependency",
     "platform_dep_features",
 ]
 

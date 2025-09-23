@@ -1,0 +1,9 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+aws-smithy-types = {version = "1.3.2", features = ["http-body-1-x"]}

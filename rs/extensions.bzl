@@ -8,6 +8,7 @@ load(
     "prune_cargo_toml_json",
     "run_toml2json",
 )
+load("//rs/private:semver.bzl", "select_matching_version")
 
 _DEFAULT_CRATE_ANNOTATION = struct(
     gen_build_script = "auto",
@@ -51,14 +52,14 @@ def _add_to_dict(d, k, v):
     existing = d.get(k, [])
     if not existing:
         d[k] = existing
-    existing.extend(v)
+    existing.append(v)
 
 def _fq_crate(name, version):
     return name + "-" + version
 
 _ALL_PLATFORMS = "*"
 
-def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples):
+def _new_feature_resolutions(possible_deps, possible_features, platform_triples):
     triples = platform_triples + [_ALL_PLATFORMS]
     features_enabled = {triple: set() for triple in triples}
     deps = {triple: set() for triple in triples}
@@ -80,7 +81,6 @@ def _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possi
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
         possible_deps = possible_deps,
-        possible_dep_fq_crate_by_name = possible_dep_fq_crate_by_name,
         possible_features = possible_features,
     )
 
@@ -107,15 +107,12 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
         deps = feature_resolutions.deps
         deps_all_platforms = feature_resolutions.deps_all_platforms
 
-        possible_dep_fq_crate_by_name = feature_resolutions.possible_dep_fq_crate_by_name
-
         if _propagate_feature_enablement(
             changed,
             fq_crate,
             features_enabled,
             feature_resolutions,
             feature_resolutions_by_fq_crate,
-            possible_dep_fq_crate_by_name,
             debug,
         ):
             changed = True
@@ -150,8 +147,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
 
                 features = dep.get("features", [])
                 if features:
-                    dep_fq = possible_dep_fq_crate_by_name[dep_name]
-                    dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+                    dep_feature_resolutions = feature_resolutions_by_fq_crate[dep["fq"]]
                     dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
 
                     prev_length = 0 if changed else len(dep_features)
@@ -164,8 +160,7 @@ def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_tripl
                 continue
 
             if bazel_target:
-                dep_fq = possible_dep_fq_crate_by_name[dep_name]
-                dep_feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+                dep_feature_resolutions = feature_resolutions_by_fq_crate[dep["fq"]]
 
             prefixed_dep_alias = "dep:" + dep_alias
             disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
@@ -210,7 +205,6 @@ def _propagate_feature_enablement(
         features_enabled,
         feature_resolutions,
         feature_resolutions_by_fq_crate,
-        possible_dep_fq_crate_by_name,
         debug):
     possible_features = feature_resolutions.possible_features
 
@@ -243,14 +237,11 @@ def _propagate_feature_enablement(
                         changed = True
                         feature_set.add(dep_name)
 
-                dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-                if not dep_fq:
-                    # Maybe it's an alias?
-                    for dep in feature_resolutions.possible_deps:
-                        if dep.get("name") == dep_name and "package" in dep:
-                            dep_name = dep["package"]
-                            break
-                    dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
+                dep_fq = None
+                for dep in feature_resolutions.possible_deps:
+                    if dep.get("name") == dep_name or dep["name"] == dep_name:
+                        dep_fq = dep["fq"]
+                        break
 
                 if not dep_fq:
                     if debug:
@@ -340,7 +331,7 @@ def _generate_hub_and_spokes(
         name = package["name"]
         version = package["version"]
 
-        _add_to_dict(versions_by_name, name, [version])
+        _add_to_dict(versions_by_name, name, version)
 
         source = package["source"]
 
@@ -417,8 +408,6 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        possible_dep_fq_crate_by_name = _compute_package_fq_deps(package, versions_by_name)
-
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             key = name + "_" + version
             fact = facts.get(key)
@@ -440,7 +429,6 @@ def _generate_hub_and_spokes(
                     dependencies = metadata["deps"]
 
                     for dep in dependencies:
-                        dep.pop("req")
                         if dep["default_features"]:
                             dep.pop("default_features")
                         if not dep["features"]:
@@ -550,6 +538,14 @@ def _generate_hub_and_spokes(
                ]
         ]
 
+        deps_by_name = {}
+        for maybe_fq_dep in package.get("dependencies", []):
+            idx = maybe_fq_dep.find(" ")
+            if idx != -1:
+                dep = maybe_fq_dep[:idx]
+                resolved_version = maybe_fq_dep[idx + 1:]
+                _add_to_dict(deps_by_name, dep, resolved_version)
+
         for dep in possible_deps:
             dep_name = dep.get("package")
             if not dep_name:
@@ -566,15 +562,30 @@ def _generate_hub_and_spokes(
                 cfg_match_cache[target] = match
             dep["target"] = match
 
-            dep_fq = possible_dep_fq_crate_by_name.get(dep_name)
-            if not dep_fq:
-                # print("NOT FOUND", dep)
+            versions = versions_by_name.get(dep_name)
+            if not versions:
                 continue
+            if len(versions) == 1:
+                resolved_version = versions[0]
+            else:
+                versions = deps_by_name.get(dep_name)
+                if not versions:
+                    continue
+                if len(versions) == 1:
+                    # TODO(zbarsky): validate?
+                    resolved_version = versions[0]
+                else:
+                    resolved_version = select_matching_version(dep["req"], versions)
+                    if not resolved_version:
+                        print(name, dep_name, versions, dep["req"])
+                        continue
 
+            dep_fq = _fq_crate(dep_name, resolved_version)
+            dep["fq"] = dep_fq
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
 
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
-            _new_feature_resolutions(possible_deps, possible_dep_fq_crate_by_name, possible_features, platform_triples)
+            _new_feature_resolutions(possible_deps, possible_features, platform_triples)
         )
 
     _date(mctx, "set up resolutions")
