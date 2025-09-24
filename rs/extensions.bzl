@@ -59,7 +59,7 @@ def _fq_crate(name, version):
 
 _ALL_PLATFORMS = "*"
 
-def _new_feature_resolutions(possible_deps, possible_features, platform_triples):
+def _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
     triples = platform_triples + [_ALL_PLATFORMS]
     features_enabled = {triple: set() for triple in triples}
     deps = {triple: set() for triple in triples}
@@ -79,6 +79,8 @@ def _new_feature_resolutions(possible_deps, possible_features, platform_triples)
         deps_all_platforms = deps[_ALL_PLATFORMS],
         aliases = {triple: dict() for triple in triples},
 
+        package_index = package_index,
+
         # Following data is immutable, it comes from crates.io + Cargo.lock
         possible_deps = possible_deps,
         possible_features = possible_features,
@@ -97,10 +99,14 @@ def _count(feature_resolutions_by_fq_crate):
         # No need to count aliases, they only get set when deps are set.
     return n
 
-def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug):
-    changed = False
+def _resolve_one_round(packages, indices, platform_triples, debug):
+    new_indices = set()
 
-    for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
+    for index in indices:
+        package = packages[index]
+        package_changed = False
+
+        feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
         features_enabled_for_all_platforms = feature_resolutions.features_enabled_for_all_platforms
 
@@ -108,13 +114,14 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
         deps_all_platforms = feature_resolutions.deps_all_platforms
 
         if _propagate_feature_enablement(
-            changed,
-            fq_crate,
+            package_changed,
+            new_indices,
+            package,
             features_enabled,
             feature_resolutions,
             debug,
         ):
-            changed = True
+            package_changed = True
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
@@ -133,8 +140,8 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                 # TODO(zbarsky): Do we care about per-platform build deps?
 
                 build_deps = feature_resolutions.build_deps
-                if changed or bazel_target not in build_deps:
-                    changed = True
+                if package_changed or bazel_target not in build_deps:
+                    package_changed = True
                     build_deps.add(bazel_target)
 
                 features = dep.get("features", [])
@@ -142,12 +149,12 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                     dep_feature_resolutions = dep["feature_resolutions"]
                     dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
 
-                    prev_length = 0 if changed else len(dep_features)
+                    prev_length = len(dep_features)
                     dep_features.update(features)
                     if dep.get("default_features", True):
                         dep_features.add("default")
-                    if not changed and prev_length != len(dep_features):
-                        changed = True
+                    if prev_length != len(dep_features):
+                        new_indices.add(dep_feature_resolutions.package_index)
 
                 continue
 
@@ -169,13 +176,13 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                         continue
 
                 if not bazel_target:
-                    print("Matched %s for %s but it wasn't part of the lockfile! This is unsupported!" % (dep, fq_crate))
+                    print("Matched %s for %s@%s but it wasn't part of the lockfile! This is unsupported!" % (dep, package["name"], package["version"]))
                     continue
                     #fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
 
                 triple_deps = deps[triple]
-                if changed or bazel_target not in triple_deps:
-                    changed = True
+                if package_changed or bazel_target not in triple_deps:
+                    package_changed = True
                     triple_deps.add(bazel_target)
 
                 if has_alias:
@@ -184,18 +191,22 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                 dep_feature_resolutions.triples_compatible_with.add(triple)
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
-                prev_length = 0 if changed else len(triple_features)
+                prev_length = len(triple_features)
                 triple_features.update(dep.get("features", []))
                 if dep.get("default_features", True):
                     triple_features.add("default")
-                if not changed and prev_length != len(triple_features):
-                    changed = True
+                if prev_length != len(triple_features):
+                    new_indices.add(dep_feature_resolutions.package_index)
 
-    return changed
+        if package_changed:
+            new_indices.add(index)
+
+    return new_indices
 
 def _propagate_feature_enablement(
-        changed,
-        fq_crate,
+        package_changed,
+        changed_package_indices,
+        package,
         features_enabled,
         feature_resolutions,
         debug):
@@ -214,8 +225,8 @@ def _propagate_feature_enablement(
             for feature in enables:
                 idx = feature.find("/")
                 if idx == -1:
-                    if changed or feature not in feature_set:
-                        changed = True
+                    if package_changed or feature not in feature_set:
+                        package_changed = True
                         feature_set.add(feature)
                     continue
 
@@ -226,25 +237,26 @@ def _propagate_feature_enablement(
                     dep_name = dep_name[:-1]
                 else:
                     # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
-                    if changed or dep_name not in feature_set:
-                        changed = True
+                    if package_changed or dep_name not in feature_set:
+                        package_changed = True
                         feature_set.add(dep_name)
 
                 found = False
                 for dep in feature_resolutions.possible_deps:
                     if dep["name"] == dep_name:
                         found = True
-                        triple_features = dep["feature_resolutions"].features_enabled[triple]
-                        if changed or dep_feature not in triple_features:
-                            changed = True
+                        dep_feature_resolutions = dep["feature_resolutions"]
+                        triple_features = dep_feature_resolutions.features_enabled[triple]
+                        if dep_feature not in triple_features:
                             triple_features.add(dep_feature)
+                            changed_package_indices.add(dep_feature_resolutions.package_index)
                         break
 
                 if not found:
                     if debug:
-                        print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
+                        print("Skipping enabling subfeature", feature, "for", package["name"], "@", package["version"], "it's not a dep...")
 
-    return changed
+    return package_changed
 
 def _parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
@@ -395,7 +407,8 @@ def _generate_hub_and_spokes(
     # match_all = [_ALL_PLATFORMS]
     cfg_match_cache = {None: platform_triples}
 
-    for package in packages:
+    for package_index in range(len(packages)):
+        package = packages[package_index]
         name = package["name"]
         version = package["version"]
         source = package["source"]
@@ -530,7 +543,7 @@ def _generate_hub_and_spokes(
                ]
         ]
 
-        feature_resolutions = _new_feature_resolutions(possible_deps, possible_features, platform_triples)
+        feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
 
@@ -626,14 +639,17 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     # Do some rounds of mutual resolution; bail when no more changes
+    indices = range(len(packages))
     for i in range(50):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        if not _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug):
+        indices = _resolve_one_round(packages, indices, platform_triples, debug)
+        if not indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
                 print("Got count", count, "in", i, "rounds")
             break
+        indices = sorted(indices)
 
     mctx.report_progress("Initializing spokes")
 
