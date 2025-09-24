@@ -126,13 +126,6 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                 # Bail early if feature is maximally enabled.
                 continue
 
-            if "package" in dep:
-                dep_name = dep["package"]
-                dep_alias = dep["name"]
-            else:
-                dep_name = dep["name"]
-                dep_alias = dep_name
-
             if kind == "build":
                 if not bazel_target:
                     # print("Build dep not found %s" % dep)
@@ -162,8 +155,10 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
             if bazel_target:
                 dep_feature_resolutions = feature_resolutions_by_fq_crate[dep["fq"]]
 
-            prefixed_dep_alias = "dep:" + dep_alias
-            disabled_on_all_platforms = dep.get("optional", False) and dep_alias not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
+            has_alias = "package" in dep
+            dep_name = dep["name"]
+            prefixed_dep_alias = "dep:" + dep_name
+            disabled_on_all_platforms = dep.get("optional", False) and dep_name not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
 
             for triple in dep["target"]:
                 if disabled_on_all_platforms:
@@ -171,7 +166,7 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                         continue
 
                     features_for_triple = features_enabled[triple]
-                    if dep_alias not in features_for_triple and prefixed_dep_alias not in features_for_triple:
+                    if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
 
                 if not bazel_target:
@@ -184,8 +179,8 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                     changed = True
                     triple_deps.add(bazel_target)
 
-                if dep_name != dep_alias:
-                    feature_resolutions.aliases[triple][bazel_target] = dep_alias.replace("-", "_")
+                if has_alias:
+                    feature_resolutions.aliases[triple][bazel_target] = dep_name.replace("-", "_")
 
                 dep_feature_resolutions.triples_compatible_with.add(triple)
                 triple_features = dep_feature_resolutions.features_enabled[triple]
@@ -239,7 +234,7 @@ def _propagate_feature_enablement(
 
                 dep_fq = None
                 for dep in feature_resolutions.possible_deps:
-                    if dep.get("name") == dep_name or dep["name"] == dep_name:
+                    if dep["name"] == dep_name:
                         dep_fq = dep["fq"]
                         break
 
@@ -548,9 +543,9 @@ def _generate_hub_and_spokes(
                 _add_to_dict(deps_by_name, dep, resolved_version)
 
         for dep in possible_deps:
-            dep_name = dep.get("package")
-            if not dep_name:
-                dep_name = dep["name"]
+            dep_package = dep.get("package")
+            if not dep_package:
+                dep_package = dep["name"]
 
             target = dep.get("target")
             match = cfg_match_cache.get(target)
@@ -563,13 +558,13 @@ def _generate_hub_and_spokes(
                 cfg_match_cache[target] = match
             dep["target"] = match
 
-            versions = versions_by_name.get(dep_name)
+            versions = versions_by_name.get(dep_package)
             if not versions:
                 continue
             if len(versions) == 1:
                 resolved_version = versions[0]
             else:
-                versions = deps_by_name.get(dep_name)
+                versions = deps_by_name.get(dep_package)
                 if not versions:
                     continue
                 if len(versions) == 1:
@@ -578,10 +573,10 @@ def _generate_hub_and_spokes(
                 else:
                     resolved_version = select_matching_version(dep["req"], versions)
                     if not resolved_version:
-                        print(name, dep_name, versions, dep["req"])
+                        print(name, dep_package, versions, dep["req"])
                         continue
 
-            dep_fq = _fq_crate(dep_name, resolved_version)
+            dep_fq = _fq_crate(dep_package, resolved_version)
             dep["fq"] = dep_fq
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
 

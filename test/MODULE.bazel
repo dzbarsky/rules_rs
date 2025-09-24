@@ -38,6 +38,7 @@ TESTS = [
     "build_script_runtime_env",
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
+    # Got count 45435 in 20 rounds
     "many_workspace_deps",
     "multiple_versions_for_dependency",
     "platform_dep_features",
@@ -53,7 +54,7 @@ TESTS = [
             "x86_64-unknown-linux-musl",
             "aarch64-unknown-linux-musl",
         ],
-        #debug = True,
+        debug = True,
         #use_wasm = True,
     )
     for test in TESTS
