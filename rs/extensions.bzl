@@ -78,7 +78,6 @@ def _new_feature_resolutions(package_index, possible_deps, possible_features, pl
         # Fast-path for access
         deps_all_platforms = deps[_ALL_PLATFORMS],
         aliases = {triple: dict() for triple in triples},
-
         package_index = package_index,
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
@@ -369,6 +368,16 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "kicked off downloads")
 
+    # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
+
+    # TODO(zbarsky): We should run `cargo metadata` while these are downloading, but for now just block to avoid
+    # https://github.com/bazelbuild/bazel/issues/26995
+    mctx.report_progress("Downloading metadata")
+    for token in download_tokens:
+        result = token.wait()
+        if not result.success:
+            fail("Could not download")
+
     cargo = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
     result = mctx.execute(
         [cargo, "metadata", "--no-deps", "--format-version=1", "--quiet"],
@@ -379,13 +388,6 @@ def _generate_hub_and_spokes(
     cargo_metadata = json.decode(result.stdout)
 
     _date(mctx, "parsed cargo metadata")
-
-    # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
-    mctx.report_progress("Downloading metadata")
-    for token in download_tokens:
-        result = token.wait()
-        if not result.success:
-            fail("Could not download")
 
     platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
 
