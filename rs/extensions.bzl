@@ -112,7 +112,6 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
             fq_crate,
             features_enabled,
             feature_resolutions,
-            feature_resolutions_by_fq_crate,
             debug,
         ):
             changed = True
@@ -140,7 +139,7 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
 
                 features = dep.get("features", [])
                 if features:
-                    dep_feature_resolutions = feature_resolutions_by_fq_crate[dep["fq"]]
+                    dep_feature_resolutions = dep["feature_resolutions"]
                     dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
 
                     prev_length = 0 if changed else len(dep_features)
@@ -153,7 +152,7 @@ def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug)
                 continue
 
             if bazel_target:
-                dep_feature_resolutions = feature_resolutions_by_fq_crate[dep["fq"]]
+                dep_feature_resolutions = dep["feature_resolutions"]
 
             has_alias = "package" in dep
             dep_name = dep["name"]
@@ -199,7 +198,6 @@ def _propagate_feature_enablement(
         fq_crate,
         features_enabled,
         feature_resolutions,
-        feature_resolutions_by_fq_crate,
         debug):
     possible_features = feature_resolutions.possible_features
 
@@ -232,21 +230,19 @@ def _propagate_feature_enablement(
                         changed = True
                         feature_set.add(dep_name)
 
-                dep_fq = None
+                found = False
                 for dep in feature_resolutions.possible_deps:
                     if dep["name"] == dep_name:
-                        dep_fq = dep["fq"]
+                        found = True
+                        triple_features = dep["feature_resolutions"].features_enabled[triple]
+                        if changed or dep_feature not in triple_features:
+                            changed = True
+                            triple_features.add(dep_feature)
                         break
 
-                if not dep_fq:
+                if not found:
                     if debug:
                         print("Skipping enabling subfeature", feature, "for", fq_crate, "it's not a dep...")
-                    continue
-
-                triple_features = feature_resolutions_by_fq_crate[dep_fq].features_enabled[triple]
-                if changed or dep_feature not in triple_features:
-                    changed = True
-                    triple_features.add(dep_feature)
 
     return changed
 
@@ -534,6 +530,11 @@ def _generate_hub_and_spokes(
                ]
         ]
 
+        feature_resolutions = _new_feature_resolutions(possible_deps, possible_features, platform_triples)
+        package["feature_resolutions"] = feature_resolutions
+        feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
+
+    for package in packages:
         deps_by_name = {}
         for maybe_fq_dep in package.get("dependencies", []):
             idx = maybe_fq_dep.find(" ")
@@ -542,7 +543,7 @@ def _generate_hub_and_spokes(
                 resolved_version = maybe_fq_dep[idx + 1:]
                 _add_to_dict(deps_by_name, dep, resolved_version)
 
-        for dep in possible_deps:
+        for dep in package["feature_resolutions"].possible_deps:
             dep_package = dep.get("package")
             if not dep_package:
                 dep_package = dep["name"]
@@ -577,12 +578,8 @@ def _generate_hub_and_spokes(
                         continue
 
             dep_fq = _fq_crate(dep_package, resolved_version)
-            dep["fq"] = dep_fq
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
-
-        feature_resolutions_by_fq_crate[_fq_crate(name, version)] = (
-            _new_feature_resolutions(possible_deps, possible_features, platform_triples)
-        )
+            dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
     _date(mctx, "set up resolutions")
 
