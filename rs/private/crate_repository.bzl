@@ -1,32 +1,40 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 
-def run_toml2json(ctx, toml_file):
-    result = ctx.execute([Label("@toml2json_host_bin//:toml2json"), toml_file])
-    if result.return_code != 0:
-        fail(result.stdout + result.stderr)
+def run_toml2json(ctx, wasm_blob, toml_file):
+    if wasm_blob == None:
+        result = ctx.execute([Label("@toml2json_host_bin//:toml2json"), toml_file])
+        if result.return_code != 0:
+            fail(result.stdout + result.stderr)
 
-    return json.decode(result.stdout)
+        return json.decode(result.stdout)
+    else:
+        data = ctx.read(toml_file)
+        result = ctx.execute_wasm(wasm_blob, "toml2json", input = data)
+        if result.return_code != 0:
+            fail(result.output)
+
+        return json.decode(result.output)
 
 # Keep in sync with below
 def prune_cargo_toml_json(cargo_toml_json):
-   package = cargo_toml_json.get("package", {})
-   lib = cargo_toml_json.get("lib", {})
+    package = cargo_toml_json.get("package", {})
+    lib = cargo_toml_json.get("lib", {})
 
-   return dict(
-       package = dict(
-           metadata = dict(
-               bazel = package.get("metadata", {}).get("bazel", {}),
-           ),
-           build = package.get("build"),
-           edition = package.get("edition"),
-           links = package.get("links"),
-       ),
-       lib = dict(
-           name = lib.get("name"),
-           proc_macro = lib.get("proc-macro") or lib.get("proc_macro"),
-           path = lib.get("path"),
-       ),
-   )
+    return dict(
+        package = dict(
+            metadata = dict(
+                bazel = package.get("metadata", {}).get("bazel", {}),
+            ),
+            build = package.get("build"),
+            edition = package.get("edition"),
+            links = package.get("links"),
+        ),
+        lib = dict(
+            name = lib.get("name"),
+            proc_macro = lib.get("proc-macro") or lib.get("proc_macro"),
+            path = lib.get("path"),
+        ),
+    )
 
 def generate_build_file(attr, cargo_toml):
     package = cargo_toml.get("package", {})
@@ -127,7 +135,11 @@ def _crate_repository_impl(rctx):
         sha256 = rctx.attr.checksum,
     )
 
-    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+    if rctx.attr.use_wasm:
+        wasm_blob = rctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
+    else:
+        wasm_blob = None
+    cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
 
     rctx.file("BUILD.bazel", generate_build_file(rctx.attr, cargo_toml))
 
@@ -156,6 +168,6 @@ crate_repository = repository_rule(
         "conditional_crate_features": attr.string(default = ""),
         "target_compatible_with": attr.string_list(mandatory = True),
         "fallback_edition": attr.string(default = "2015"),
-        "_toml2json_wasm": attr.label(default = "@rules_rs//toml2json:toml2json.wasm"),
+        "use_wasm": attr.bool(),
     },
 )

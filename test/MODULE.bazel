@@ -54,6 +54,7 @@ TESTS = [
             "aarch64-unknown-linux-musl",
         ],
         #debug = True,
+        #use_wasm = True,
     )
     for test in TESTS
 ]

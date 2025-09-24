@@ -297,6 +297,7 @@ def _date(ctx, label):
 
 def _generate_hub_and_spokes(
         mctx,
+        wasm_blob,
         hub_name,
         annotations,
         cargo_lock_path,
@@ -314,7 +315,7 @@ def _generate_hub_and_spokes(
     """
     _date(mctx, "start")
     mctx.watch(cargo_lock_path)
-    cargo_lock = run_toml2json(mctx, cargo_lock_path)
+    cargo_lock = run_toml2json(mctx, wasm_blob, cargo_lock_path)
     _date(mctx, "parsed")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
@@ -454,7 +455,7 @@ def _generate_hub_and_spokes(
                 fact = json.decode(fact)
             else:
                 strip_prefix = None
-                cargo_toml_json = run_toml2json(mctx, "%s_%s.Cargo.toml" % (name, version))
+                cargo_toml_json = run_toml2json(mctx, wasm_blob, "%s_%s.Cargo.toml" % (name, version))
 
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     if name in cargo_toml_json["workspace"]["members"]:
@@ -478,7 +479,7 @@ def _generate_hub_and_spokes(
                         )
                         if not result.success:
                             fail("Could not download")
-                        cargo_toml_json = run_toml2json(mctx, download_path)
+                        cargo_toml_json = run_toml2json(mctx, wasm_blob, download_path)
 
                 dependencies = []
                 for dep, spec in cargo_toml_json.get("dependencies", {}).items():
@@ -705,6 +706,7 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
                 strip_prefix = "%s-%s" % name_version,
+                use_wasm = wasm_blob != None,
                 **kwargs
             )
         else:
@@ -811,6 +813,8 @@ def _compute_workspace_fq_deps(workspace_members, versions_by_name):
     return workspace_fq_deps
 
 def _crate_impl(mctx):
+    toml2json = None
+
     facts = {}
     direct_deps = []
     for mod in mctx.modules:
@@ -826,11 +830,17 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
+            wasm_blob = None
+            if cfg.use_wasm:
+                if toml2json == None:
+                    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
+                wasm_blob = toml2json
+
             if cfg.debug:
                 for _ in range(10):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -858,6 +868,7 @@ _from_cargo = tag_class(
             mandatory = True,
         ),
         "debug": attr.bool(),
+        "use_wasm": attr.bool(),
     },
 )
 
