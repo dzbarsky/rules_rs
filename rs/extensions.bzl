@@ -97,7 +97,7 @@ def _count(feature_resolutions_by_fq_crate):
         # No need to count aliases, they only get set when deps are set.
     return n
 
-def _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
+def _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug):
     changed = False
 
     for fq_crate, feature_resolutions in feature_resolutions_by_fq_crate.items():
@@ -637,7 +637,7 @@ def _generate_hub_and_spokes(
     for i in range(50):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        if not _resolve_one_round(hub_name, feature_resolutions_by_fq_crate, platform_triples, debug):
+        if not _resolve_one_round(feature_resolutions_by_fq_crate, platform_triples, debug):
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
                 print("Got count", count, "in", i, "rounds")
