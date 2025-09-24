@@ -54,7 +54,7 @@ TESTS = [
             "x86_64-unknown-linux-musl",
             "aarch64-unknown-linux-musl",
         ],
-        debug = True,
+        #debug = True,
         #use_wasm = True,
     )
     for test in TESTS

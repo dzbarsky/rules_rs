@@ -126,17 +126,15 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
             bazel_target = dep.get("bazel_target")
+            if not bazel_target:
+                continue
 
             kind = dep.get("kind", "normal")
-            if kind == "normal" and bazel_target and bazel_target in deps_all_platforms:
+            if kind == "normal" and bazel_target in deps_all_platforms:
                 # Bail early if feature is maximally enabled.
                 continue
 
             if kind == "build":
-                if not bazel_target:
-                    # print("Build dep not found %s" % dep)
-                    continue
-
                 # TODO(zbarsky): Do we care about per-platform build deps?
 
                 build_deps = feature_resolutions.build_deps
@@ -158,8 +156,7 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
 
                 continue
 
-            if bazel_target:
-                dep_feature_resolutions = dep["feature_resolutions"]
+            dep_feature_resolutions = dep["feature_resolutions"]
 
             has_alias = "package" in dep
             dep_name = dep["name"]
@@ -174,11 +171,6 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     features_for_triple = features_enabled[triple]
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
-
-                if not bazel_target:
-                    print("Matched %s for %s@%s but it wasn't part of the lockfile! This is unsupported!" % (dep, package["name"], package["version"]))
-                    continue
-                    #fail("Matched %s but it wasn't part of the lockfile! This is unsupported!" % dep)
 
                 triple_deps = deps[triple]
                 if package_changed or bazel_target not in triple_deps:
@@ -561,17 +553,6 @@ def _generate_hub_and_spokes(
             if not dep_package:
                 dep_package = dep["name"]
 
-            target = dep.get("target")
-            match = cfg_match_cache.get(target)
-            if not match:
-                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-
-                # TODO(zbarsky): Figure out how to do this optimization safely.
-                #if len(match) == len(platform_cfg_attrs):
-                #    match = match_all
-                cfg_match_cache[target] = match
-            dep["target"] = match
-
             versions = versions_by_name.get(dep_package)
             if not versions:
                 continue
@@ -593,6 +574,17 @@ def _generate_hub_and_spokes(
             dep_fq = _fq_crate(dep_package, resolved_version)
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
+
+            target = dep.get("target")
+            match = cfg_match_cache.get(target)
+            if not match:
+                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+
+                # TODO(zbarsky): Figure out how to do this optimization safely.
+                #if len(match) == len(platform_cfg_attrs):
+                #    match = match_all
+                cfg_match_cache[target] = match
+            dep["target"] = match
 
     _date(mctx, "set up resolutions")
 
