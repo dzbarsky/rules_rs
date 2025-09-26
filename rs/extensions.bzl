@@ -1,4 +1,3 @@
-load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load(
@@ -344,12 +343,7 @@ def _generate_hub_and_spokes(
             # TODO(zbarsky): dedupe fetches when multiple versions?
             # TODO(zbarsky): Support custom registries
             url = "https://index.crates.io/" + _sharded_path(name)
-            token = mctx.download(
-                url,
-                key + ".jsonl",
-                canonical_id = get_default_canonical_id(mctx, urls = [url]),
-                block = False,
-            )
+            token = mctx.download(url, key + ".jsonl", block = False)
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
             # TODO(zbarsky): Support other forges
@@ -360,12 +354,7 @@ def _generate_hub_and_spokes(
                 continue
 
             url = _git_url_to_cargo_toml(source)
-            token = mctx.download(
-                url,
-                "%s_%s.Cargo.toml" % (name, version),
-                canonical_id = get_default_canonical_id(mctx, urls = [url]),
-                block = False,
-            )
+            token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
             download_tokens.append(token)
         else:
             fail("Unknown source " + source)
@@ -474,11 +463,7 @@ def _generate_hub_and_spokes(
                         package["strip_prefix"] = strip_prefix
                         download_path = strip_prefix + ".Cargo.toml"
                         url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                        result = mctx.download(
-                            url,
-                            download_path,
-                            canonical_id = get_default_canonical_id(mctx, urls = [url]),
-                        )
+                        result = mctx.download(url, download_path)
                         if not result.success:
                             fail("Could not download")
                         cargo_toml_json = run_toml2json(mctx, wasm_blob, download_path)
