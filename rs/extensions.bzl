@@ -141,15 +141,13 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     package_changed = True
                     build_deps.add(bazel_target)
 
-                features = dep.get("features", [])
+                features = dep.get("features")
                 if features:
                     dep_feature_resolutions = dep["feature_resolutions"]
                     dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
 
                     prev_length = len(dep_features)
                     dep_features.update(features)
-                    if dep.get("default_features", True):
-                        dep_features.add("default")
                     if prev_length != len(dep_features):
                         new_indices.add(dep_feature_resolutions.package_index)
 
@@ -182,12 +180,12 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                 dep_feature_resolutions.triples_compatible_with.add(triple)
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
-                prev_length = len(triple_features)
-                triple_features.update(dep.get("features", []))
-                if dep.get("default_features", True):
-                    triple_features.add("default")
-                if prev_length != len(triple_features):
-                    new_indices.add(dep_feature_resolutions.package_index)
+                dep_features = dep.get("features")
+                if dep_features:
+                    prev_length = len(triple_features)
+                    triple_features.update(dep_features)
+                    if prev_length != len(triple_features):
+                        new_indices.add(dep_feature_resolutions.package_index)
 
         if package_changed:
             new_indices.add(index)
@@ -536,6 +534,10 @@ def _generate_hub_and_spokes(
                    "rustc-std-workspace-std",
                ]
         ]
+
+        for dep in possible_deps:
+            if dep.get("default_features", True):
+                _add_to_dict(dep, "features", "default")
 
         feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
         package["feature_resolutions"] = feature_resolutions
