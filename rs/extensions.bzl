@@ -224,7 +224,7 @@ def _propagate_feature_enablement(
             for feature in enables:
                 idx = feature.find("/")
                 if idx == -1:
-                    if package_changed or feature not in feature_set:
+                    if feature not in feature_set:
                         package_changed = True
                         feature_set.add(feature)
                     continue
@@ -236,7 +236,7 @@ def _propagate_feature_enablement(
                     dep_name = dep_name[:-1]
                 else:
                     # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
-                    if package_changed or dep_name not in feature_set:
+                    if dep_name not in feature_set:
                         package_changed = True
                         feature_set.add(dep_name)
 
