@@ -129,9 +129,6 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                 continue
 
             kind = dep.get("kind", "normal")
-            if kind == "normal" and bazel_target in deps_all_platforms:
-                # Bail early if feature is maximally enabled.
-                continue
 
             if kind == "build":
                 # TODO(zbarsky): Do we care about per-platform build deps?
@@ -151,6 +148,7 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     if prev_length != len(dep_features):
                         new_indices.add(dep_feature_resolutions.package_index)
 
+                dep["bazel_target"] = None
                 continue
 
             dep_feature_resolutions = dep["feature_resolutions"]
@@ -160,7 +158,10 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
             prefixed_dep_alias = "dep:" + dep_name
             disabled_on_all_platforms = dep.get("optional", False) and dep_name not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
 
-            for triple in dep["target"]:
+            to_remove = None
+            match = dep["target"]
+
+            for triple in match:
                 if disabled_on_all_platforms:
                     if triple == _ALL_PLATFORMS:
                         continue
@@ -186,6 +187,15 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     triple_features.update(dep_features)
                     if prev_length != len(triple_features):
                         new_indices.add(dep_feature_resolutions.package_index)
+                if not to_remove:
+                    to_remove = set()
+                to_remove.add(triple)
+
+            if to_remove:
+                if len(to_remove) == len(match):
+                    dep["bazel_target"] = None
+                else:
+                    match.difference_update(to_remove)
 
         if package_changed:
             new_indices.add(index)
@@ -588,7 +598,7 @@ def _generate_hub_and_spokes(
                 #if len(match) == len(platform_cfg_attrs):
                 #    match = match_all
                 cfg_match_cache[target] = match
-            dep["target"] = match
+            dep["target"] = set(match)
 
     _date(mctx, "set up resolutions")
 
@@ -841,7 +851,7 @@ def _crate_impl(mctx):
                 wasm_blob = toml2json
 
             if cfg.debug:
-                for _ in range(10):
+                for _ in range(25):
                     _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
