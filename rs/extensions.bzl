@@ -69,9 +69,6 @@ def _new_feature_resolutions(package_index, possible_deps, possible_features, pl
         # Fast-path for access
         features_enabled_for_all_platforms = features_enabled[_ALL_PLATFORMS],
 
-        # If set, we will set `target_compatible_with`. If have "*" that means all.
-        triples_compatible_with = set(),
-
         # TODO(zbarsky): Do these also need the platform-specific variants?
         build_deps = set(),
         deps = deps,
@@ -178,7 +175,6 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                 if has_alias:
                     feature_resolutions.aliases[triple][bazel_target] = dep_name.replace("-", "_")
 
-                dep_feature_resolutions.triples_compatible_with.add(triple)
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
                 dep_features = dep.get("features")
@@ -634,7 +630,6 @@ def _generate_hub_and_spokes(
 
             for triple in match:
                 feature_resolutions.features_enabled[triple].update(features)
-                feature_resolutions.triples_compatible_with.add(triple)
 
     # Set initial set of features from annotations
     for crate, annotation in annotations.items():
@@ -659,17 +654,14 @@ def _generate_hub_and_spokes(
 
     mctx.report_progress("Initializing spokes")
 
+    target_compatible_with = [_platform(triple) for triple in platform_triples]
+
     for package in packages:
         name = package["name"]
         version = package["version"]
         checksum = package.get("checksum")
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
-
-        triples_compatible_with = feature_resolutions.triples_compatible_with
-
-        if "*" in triples_compatible_with or not triples_compatible_with:
-            triples_compatible_with = set(platform_triples)
 
         all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
         all_aliases = feature_resolutions.aliases.pop(_ALL_PLATFORMS)
@@ -704,7 +696,7 @@ def _generate_hub_and_spokes(
             conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
             crate_features = repr(sorted(features_enabled | set(annotation.crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
-            target_compatible_with = [_platform(triple) for triple in sorted(triples_compatible_with)],
+            target_compatible_with = target_compatible_with,
             fallback_edition = package.get("edition"),
         )
 
