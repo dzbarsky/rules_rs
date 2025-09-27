@@ -29,17 +29,17 @@ def _spoke_repo(hub_name, name, version):
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
 
-def _select(platform_items, default = []):
+def _select(platform_items):
     branches = []
 
     for triple, items in platform_items.items():
         if items:
-            branches.append((_platform(triple), repr(sorted(items) if type(items) == "set" else items)))
+            branches.append((_platform(triple), repr(sorted(items))))
 
     if not branches:
         return ""
 
-    branches.append(("//conditions:default", repr(default)))
+    branches.append(("//conditions:default", "[]"))
 
     return """select({
         %s
@@ -73,7 +73,7 @@ def _new_feature_resolutions(package_index, possible_deps, possible_features, pl
         deps = deps,
         # Fast-path for access
         deps_all_platforms = deps[_ALL_PLATFORMS],
-        aliases = {triple: dict() for triple in triples},
+        aliases = {},
         package_index = package_index,
 
         # Following data is immutable, it comes from crates.io + Cargo.lock
@@ -172,7 +172,7 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     triple_deps.add(bazel_target)
 
                 if has_alias:
-                    feature_resolutions.aliases[triple][bazel_target] = dep_name.replace("-", "_")
+                    feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
 
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
@@ -649,7 +649,6 @@ def _generate_hub_and_spokes(
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
         all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
-        all_aliases = feature_resolutions.aliases.pop(_ALL_PLATFORMS)
         features_enabled = feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
 
         # Remove conditional deps that are present on all platforms already.
@@ -657,7 +656,6 @@ def _generate_hub_and_spokes(
             deps.difference_update(all_platform_deps)
 
         conditional_deps = _select(feature_resolutions.deps)
-        conditional_aliases = _select(feature_resolutions.aliases, default = {})
         conditional_crate_features = _select(feature_resolutions.features_enabled)
 
         annotation = annotations.get(name)
@@ -677,8 +675,7 @@ def _generate_hub_and_spokes(
             data = annotation.data,
             deps = sorted(all_platform_deps | set(annotation.deps)),
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
-            aliases = all_aliases,
-            conditional_aliases = " | " + conditional_aliases if conditional_aliases else "",
+            aliases = feature_resolutions.aliases,
             crate_features = repr(sorted(features_enabled | set(annotation.crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
             target_compatible_with = target_compatible_with,

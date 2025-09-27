@@ -70,7 +70,7 @@ rust_crate(
     version = {version},
     aliases = {{
         {aliases}
-    }}{conditional_aliases},
+    }},
     deps = [
         {deps}
     ]{conditional_deps},
@@ -107,7 +107,6 @@ rust_crate(
         crate_name = repr(crate_name),
         version = repr(attr.version),
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
-        conditional_aliases = attr.conditional_aliases,
         deps = ",\n        ".join(['"%s"' % d for d in attr.deps + bazel_metadata.get("deps", [])]),
         conditional_deps = attr.conditional_deps,
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
@@ -163,7 +162,6 @@ crate_repository = repository_rule(
         "deps": attr.string_list(default = []),
         "conditional_deps": attr.string(default = ""),
         "aliases": attr.string_dict(),
-        "conditional_aliases": attr.string(default = ""),
         "crate_features": attr.string(mandatory = True),
         "conditional_crate_features": attr.string(default = ""),
         "target_compatible_with": attr.string_list(mandatory = True),

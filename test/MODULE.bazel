@@ -34,14 +34,14 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
-    #"build_script_aliases",
-    #"build_script_runtime_env",
-    #"build_dep_features",
-    #"feature_name_overrides_implicit_dep",
+    "build_script_aliases",
+    "build_script_runtime_env",
+    "build_dep_features",
+    "feature_name_overrides_implicit_dep",
     # Got count 45556 in 20 rounds
     "many_workspace_deps",
-    #"multiple_versions_for_dependency",
-    #"platform_dep_features",
+    "multiple_versions_for_dependency",
+    "platform_dep_features",
 ]
 
 [
