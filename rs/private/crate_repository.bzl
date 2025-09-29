@@ -92,7 +92,7 @@ rust_crate(
     ],
     build_deps = [
         {build_deps}
-    ],
+    ]{conditional_build_deps},
     build_script_env = {build_script_env},
     build_script_toolchains = {build_script_toolchains},
     is_proc_macro = {is_proc_macro},
@@ -120,6 +120,7 @@ rust_crate(
         build_script = repr(build_script),
         build_script_data = ",\n        ".join(['"%s"' % d for d in attr.build_script_data]),
         build_deps = ",\n        ".join(['"%s"' % d for d in attr.build_deps]),
+        conditional_build_deps = attr.conditional_build_deps,
         build_script_env = repr(attr.build_script_env),
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
         is_proc_macro = repr(is_proc_macro),
@@ -154,6 +155,7 @@ crate_repository = repository_rule(
         "checksum": attr.string(),
         "gen_build_script": attr.string(),
         "build_deps": attr.label_list(default = []),
+        "conditional_build_deps": attr.string(default = ""),
         "build_script_data": attr.label_list(default = []),
         "build_script_env": attr.string_dict(),
         "build_script_toolchains": attr.label_list(),

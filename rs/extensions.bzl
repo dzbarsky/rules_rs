@@ -29,6 +29,7 @@ def _spoke_repo(hub_name, name, version):
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
 
+
 def _select(platform_items):
     branches = []
 
@@ -68,8 +69,7 @@ def _new_feature_resolutions(package_index, possible_deps, possible_features, pl
         # Fast-path for access
         features_enabled_for_all_platforms = features_enabled[_ALL_PLATFORMS],
 
-        # TODO(zbarsky): Do these also need the platform-specific variants?
-        build_deps = set(),
+        build_deps = {triple: set() for triple in triples},
         deps = deps,
         # Fast-path for access
         deps_all_platforms = deps[_ALL_PLATFORMS],
@@ -87,7 +87,9 @@ def _count(feature_resolutions_by_fq_crate):
         for features in feature_resolutions.features_enabled.values():
             n += len(features)
 
-        n += len(feature_resolutions.build_deps)
+        for build_deps in feature_resolutions.build_deps.values():
+            n += len(build_deps)
+
         for deps in feature_resolutions.deps.values():
             n += len(deps)
 
@@ -126,27 +128,6 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
 
             kind = dep.get("kind", "normal")
 
-            if kind == "build":
-                # TODO(zbarsky): Do we care about per-platform build deps?
-
-                build_deps = feature_resolutions.build_deps
-                if package_changed or bazel_target not in build_deps:
-                    package_changed = True
-                    build_deps.add(bazel_target)
-
-                features = dep.get("features")
-                if features:
-                    dep_feature_resolutions = dep["feature_resolutions"]
-                    dep_features = dep_feature_resolutions.features_enabled_for_all_platforms
-
-                    prev_length = len(dep_features)
-                    dep_features.update(features)
-                    if prev_length != len(dep_features):
-                        new_indices.add(dep_feature_resolutions.package_index)
-
-                dep["bazel_target"] = None
-                continue
-
             dep_feature_resolutions = dep["feature_resolutions"]
 
             has_alias = "package" in dep
@@ -166,7 +147,7 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
 
-                triple_deps = deps[triple]
+                triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
                 if package_changed or bazel_target not in triple_deps:
                     package_changed = True
                     triple_deps.add(bazel_target)
@@ -649,6 +630,7 @@ def _generate_hub_and_spokes(
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
 
         all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
+        all_platform_build_deps = feature_resolutions.build_deps.pop(_ALL_PLATFORMS)
         features_enabled = feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
 
         # Remove conditional deps that are present on all platforms already.
@@ -656,6 +638,7 @@ def _generate_hub_and_spokes(
             deps.difference_update(all_platform_deps)
 
         conditional_deps = _select(feature_resolutions.deps)
+        conditional_build_deps = _select(feature_resolutions.build_deps)
         conditional_crate_features = _select(feature_resolutions.features_enabled)
 
         annotation = annotations.get(name)
@@ -667,7 +650,8 @@ def _generate_hub_and_spokes(
             version = version,
             checksum = checksum,
             gen_build_script = annotation.gen_build_script,
-            build_deps = sorted(feature_resolutions.build_deps),
+            build_deps = sorted(all_platform_build_deps),
+            conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
             build_script_data = annotation.build_script_data,
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
