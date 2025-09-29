@@ -71,8 +71,6 @@ def _new_feature_resolutions(package_index, possible_deps, possible_features, pl
 
         build_deps = {triple: set() for triple in triples},
         deps = deps,
-        # Fast-path for access
-        deps_all_platforms = deps[_ALL_PLATFORMS],
         aliases = {},
         package_index = package_index,
 
@@ -96,10 +94,10 @@ def _count(feature_resolutions_by_fq_crate):
         # No need to count aliases, they only get set when deps are set.
     return n
 
-def _resolve_one_round(packages, indices, platform_triples, debug):
-    new_indices = set()
+def _resolve_one_round(packages, dirty_package_indices, debug):
+    new_dirty_package_indices = set()
 
-    for index in indices:
+    for index in dirty_package_indices:
         package = packages[index]
         package_changed = False
 
@@ -108,11 +106,10 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
         features_enabled_for_all_platforms = feature_resolutions.features_enabled_for_all_platforms
 
         deps = feature_resolutions.deps
-        deps_all_platforms = feature_resolutions.deps_all_platforms
 
         if _propagate_feature_enablement(
             package_changed,
-            new_indices,
+            new_dirty_package_indices,
             package,
             features_enabled,
             feature_resolutions,
@@ -162,7 +159,7 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     prev_length = len(triple_features)
                     triple_features.update(dep_features)
                     if prev_length != len(triple_features):
-                        new_indices.add(dep_feature_resolutions.package_index)
+                        new_dirty_package_indices.add(dep_feature_resolutions.package_index)
                 if not to_remove:
                     to_remove = set()
                 to_remove.add(triple)
@@ -174,13 +171,13 @@ def _resolve_one_round(packages, indices, platform_triples, debug):
                     match.difference_update(to_remove)
 
         if package_changed:
-            new_indices.add(index)
+            new_dirty_package_indices.add(index)
 
-    return new_indices
+    return new_dirty_package_indices
 
 def _propagate_feature_enablement(
         package_changed,
-        changed_package_indices,
+        dirty_package_indices,
         package,
         features_enabled,
         feature_resolutions,
@@ -224,7 +221,7 @@ def _propagate_feature_enablement(
                         triple_features = dep_feature_resolutions.features_enabled[triple]
                         if dep_feature not in triple_features:
                             triple_features.add(dep_feature)
-                            changed_package_indices.add(dep_feature_resolutions.package_index)
+                            dirty_package_indices.add(dep_feature_resolutions.package_index)
                         break
 
                 if not found:
@@ -606,17 +603,17 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     # Do some rounds of mutual resolution; bail when no more changes
-    indices = range(len(packages))
+    dirty_package_indices = range(len(packages))
     for i in range(50):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        indices = _resolve_one_round(packages, indices, platform_triples, debug)
-        if not indices:
+        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, debug)
+        if not dirty_package_indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
                 print("Got count", count, "in", i, "rounds")
             break
-        indices = sorted(indices)
+        dirty_package_indices = sorted(dirty_package_indices)
 
     mctx.report_progress("Initializing spokes")
 
