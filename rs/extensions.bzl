@@ -1,11 +1,8 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
-load(
-    "//rs/private:crate_repository.bzl",
-    "crate_repository",
-    "crate_git_repository",
-    "run_toml2json",
-)
+load("//rs/private:crate_repository.bzl", "crate_repository")
+load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:semver.bzl", "select_matching_version")
+load("//rs/private:toml2json.bzl", "run_toml2json")
 
 _DEFAULT_CRATE_ANNOTATION = struct(
     gen_build_script = "auto",
