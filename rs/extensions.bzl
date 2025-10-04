@@ -1,10 +1,8 @@
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load(
     "//rs/private:crate_repository.bzl",
     "crate_repository",
-    "generate_build_file",
-    "prune_cargo_toml_json",
+    "crate_git_repository",
     "run_toml2json",
 )
 load("//rs/private:semver.bzl", "select_matching_version")
@@ -18,6 +16,9 @@ _DEFAULT_CRATE_ANNOTATION = struct(
     deps = [],
     crate_features = [],
     rustc_flags = [],
+    patch_args = [],
+    patch_tool = None,
+    patches = [],
 )
 
 def _spoke_repo(hub_name, name, version):
@@ -427,17 +428,17 @@ def _generate_hub_and_spokes(
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, "%s_%s.Cargo.toml" % (name, version))
 
                 if cargo_toml_json.get("package", {}).get("name") != name:
-                    if name in cargo_toml_json["workspace"]["members"]:
+                    workspace = cargo_toml_json["workspace"]
+                    if name in workspace["members"]:
                         strip_prefix = name
                     else:
                         # TODO(zbarsky): more cases to handle here?
-                        for dep in cargo_toml_json["workspace"]["dependencies"].values():
+                        for dep in workspace["dependencies"].values():
                             if type(dep) == "dict" and dep.get("package") == name:
                                 strip_prefix = dep["path"]
                                 break
 
                     if strip_prefix:
-                        package["edition"] = cargo_toml_json["workspace"].get("edition")
                         package["strip_prefix"] = strip_prefix
                         download_path = strip_prefix + ".Cargo.toml"
                         url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
@@ -480,7 +481,6 @@ def _generate_hub_and_spokes(
 
                 fact = dict(
                     features = cargo_toml_json.get("features", {}),
-                    cargo_toml_json = prune_cargo_toml_json(cargo_toml_json),
                     dependencies = dependencies,
                     strip_prefix = strip_prefix,
                 )
@@ -489,7 +489,6 @@ def _generate_hub_and_spokes(
                 facts[key] = json.encode(fact)
 
             package["strip_prefix"] = fact["strip_prefix"]
-            package["cargo_toml_json"] = fact["cargo_toml_json"]
 
         possible_features = fact["features"]
         possible_deps = [
@@ -597,7 +596,7 @@ def _generate_hub_and_spokes(
     # Set initial set of features from annotations
     for crate, annotation in annotations.items():
         if annotation.crate_features:
-            for version in versions_by_name[crate]:
+            for version in versions_by_name.get(crate, []):
                 feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled_for_all_platforms.update(annotation.crate_features)
 
     _date(mctx, "set up initial deps!")
@@ -644,8 +643,6 @@ def _generate_hub_and_spokes(
 
         kwargs = dict(
             crate = name,
-            version = version,
-            checksum = checksum,
             gen_build_script = annotation.gen_build_script,
             build_deps = sorted(all_platform_build_deps),
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
@@ -660,7 +657,10 @@ def _generate_hub_and_spokes(
             crate_features = repr(sorted(features_enabled | set(annotation.crate_features))),
             conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
             target_compatible_with = target_compatible_with,
-            fallback_edition = package.get("edition"),
+            use_wasm = wasm_blob != None,
+            patch_args = annotation.patch_args,
+            patch_tool = annotation.patch_tool,
+            patches = annotation.patches,
         )
 
         repo_name = _spoke_repo(hub_name, name, version)
@@ -675,24 +675,22 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
                 strip_prefix = "%s-%s" % name_version,
-                use_wasm = wasm_blob != None,
+                checksum = checksum,
                 **kwargs
             )
         else:
-            build_file_content = generate_build_file(struct(**kwargs), package["cargo_toml_json"])
-
             repo_path, sha = _parse_git_url(package["source"])
 
             if dry_run:
                 continue
 
-            new_git_repository(
+            crate_git_repository(
                 name = repo_name,
                 init_submodules = True,
-                build_file_content = build_file_content,
                 strip_prefix = package.get("strip_prefix"),
                 commit = sha,
                 remote = "https://github.com/%s.git" % repo_path,
+                **kwargs,
             )
 
     _date(mctx, "created repos")
@@ -954,15 +952,15 @@ _annotation = tag_class(
         # "override_target_proc_macro": attr.label(
         #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
         # ),
-        # "patch_args": attr.string_list(
-        #     doc = "The `patch_args` attribute of a Bazel repository rule. See [http_archive.patch_args](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patch_args)",
-        # ),
-        # "patch_tool": attr.string(
-        #     doc = "The `patch_tool` attribute of a Bazel repository rule. See [http_archive.patch_tool](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patch_tool)",
-        # ),
-        # "patches": attr.label_list(
-        #     doc = "The `patches` attribute of a Bazel repository rule. See [http_archive.patches](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patches)",
-        # ),
+        "patch_args": attr.string_list(
+            doc = "The `patch_args` attribute of a Bazel repository rule. See [http_archive.patch_args](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patch_args)",
+        ),
+        "patch_tool": attr.string(
+            doc = "The `patch_tool` attribute of a Bazel repository rule. See [http_archive.patch_tool](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patch_tool)",
+        ),
+        "patches": attr.label_list(
+            doc = "The `patches` attribute of a Bazel repository rule. See [http_archive.patches](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patches)",
+        ),
         # "proc_macro_deps": _relative_label_list(
         #     doc = "A list of labels to add to a crate's `rust_library::proc_macro_deps` attribute.",
         # ),
