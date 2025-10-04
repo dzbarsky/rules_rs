@@ -25,7 +25,7 @@ def generate_build_file(attr, cargo_toml):
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 
 rust_crate(
-    name = {crate},
+    name = {name},
     crate_name = {crate_name},
     version = {version},
     aliases = {{
@@ -63,7 +63,7 @@ rust_crate(
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
     return build_content.format(
-        crate = repr(attr.crate),
+        name = repr(package["name"]),
         crate_name = repr(crate_name),
         version = repr(package["version"]),
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
@@ -87,8 +87,6 @@ rust_crate(
     )
 
 common_attrs = {
-    "crate": attr.string(mandatory = True),
-    # TODO(zbarsky): Do we need the above?
     "gen_build_script": attr.string(),
     "build_deps": attr.label_list(default = []),
     "conditional_build_deps": attr.string(default = ""),

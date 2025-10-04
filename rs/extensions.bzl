@@ -616,11 +616,11 @@ def _generate_hub_and_spokes(
     target_compatible_with = [_platform(triple) for triple in platform_triples]
 
     for package in packages:
-        name = package["name"]
+        crate_name = package["name"]
         version = package["version"]
         checksum = package.get("checksum")
 
-        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(name, version)]
+        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
         all_platform_build_deps = feature_resolutions.build_deps.pop(_ALL_PLATFORMS)
@@ -634,12 +634,11 @@ def _generate_hub_and_spokes(
         conditional_build_deps = _select(feature_resolutions.build_deps)
         conditional_crate_features = _select(feature_resolutions.features_enabled)
 
-        annotation = annotations.get(name)
+        annotation = annotations.get(crate_name)
         if not annotation:
             annotation = _DEFAULT_CRATE_ANNOTATION
 
         kwargs = dict(
-            crate = name,
             gen_build_script = annotation.gen_build_script,
             build_deps = sorted(all_platform_build_deps),
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
@@ -660,13 +659,13 @@ def _generate_hub_and_spokes(
             patches = annotation.patches,
         )
 
-        repo_name = _spoke_repo(hub_name, name, version)
+        repo_name = _spoke_repo(hub_name, crate_name, version)
 
         if checksum:
             if dry_run:
                 continue
 
-            name_version = (name, version)
+            name_version = (crate_name, version)
 
             crate_repository(
                 name = repo_name,
