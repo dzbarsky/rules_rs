@@ -1,7 +1,40 @@
 
+load(":semver.bzl", "parse_full_version")
+
 def generate_build_file(rctx, cargo_toml):
     attr = rctx.attr
     package = cargo_toml["package"]
+
+    name = package["name"]
+    version = package["version"]
+    parsed_version = parse_full_version(version)
+
+    readme = package.get("readme", "")
+    if (not readme or readme == True) and rctx.path("README.md").exists:
+        readme = "README.md"
+
+    cargo_toml_env_vars = {
+        "CARGO_PKG_VERSION": version,
+        "CARGO_PKG_VERSION_MAJOR": str(parsed_version[0]),
+        "CARGO_PKG_VERSION_MINOR": str(parsed_version[1]),
+        "CARGO_PKG_VERSION_PATCH": str(parsed_version[2]),
+        "CARGO_PKG_VERSION_PRE": parsed_version[3],
+        "CARGO_PKG_NAME": name,
+        "CARGO_PKG_AUTHORS": ":".join(package.get("authors", [])),
+        "CARGO_PKG_DESCRIPTION": package.get("description", "").replace("\n", "\\"),
+        "CARGO_PKG_HOMEPAGE": package.get("homepage", ""),
+        "CARGO_PKG_REPOSITORY": package.get("repository", ""),
+        "CARGO_PKG_LICENSE": package.get("license", ""),
+        "CARGO_PKG_LICENSE_FILE": package.get("license_file", ""),
+        "CARGO_PKG_RUST_VERSION": package.get("rust-version", ""),
+        "CARGO_PKG_README": readme,
+    }
+
+    rctx.file(
+        "cargo_toml_env_vars.env",
+        "\n".join(["%s=%s" % kv for kv in cargo_toml_env_vars.items()]),
+    )
+
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
 
     if attr.gen_build_script == "off" or bazel_metadata.get("gen_build_script") == False:
@@ -67,9 +100,9 @@ rust_crate(
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
     return build_content.format(
-        name = repr(package["name"]),
+        name = repr(name),
         crate_name = repr(crate_name),
-        version = repr(package["version"]),
+        version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
         deps = ",\n        ".join(['"%s"' % d for d in attr.deps + bazel_metadata.get("deps", [])]),
         conditional_deps = attr.conditional_deps,

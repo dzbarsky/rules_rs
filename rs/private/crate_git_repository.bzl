@@ -26,8 +26,18 @@ def _clone_or_update_repo(ctx, wasm_blob):
 
     return workspace_cargo_toml
 
-# TODO(zbarsky): Inherit metadata fields?
-_INHERITABLE_FIELDS = ["edition"]
+_INHERITABLE_FIELDS = [
+    "version",
+    "edition",
+    "description",
+    "homepage",
+    "repository",
+    "license",
+    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
+    "license_file",
+    "rust_version",
+    "readme",
+]
 
 def _crate_git_repository_implementation(rctx):
     if rctx.attr.use_wasm:

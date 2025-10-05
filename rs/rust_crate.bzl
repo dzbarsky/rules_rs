@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script", "cargo_toml_env_vars")
+load("@rules_rust//cargo/private:cargo_build_script_wrapper.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
 
@@ -48,11 +48,6 @@ def rust_crate(
         "norustfmt",
     ]
 
-    cargo_toml_env_vars(
-        name = "cargo_toml_env_vars",
-        src = "Cargo.toml",
-    )
-
     if build_script:
         rust_deps(
             name = "_bs_deps",
@@ -81,7 +76,7 @@ def rust_crate(
             proc_macro_deps = [":_bs_proc_macro_deps"],
             edition = edition,
             pkg_name = crate_name,
-            rustc_env_files = [":cargo_toml_env_vars"],
+            rustc_env_files = ["cargo_toml_env_vars.env"],
             rustc_flags = ["--cap-lints=allow"],
             srcs = srcs,
             target_compatible_with = target_compatible_with,
@@ -119,7 +114,7 @@ def rust_crate(
         crate_features = crate_features,
         crate_root = crate_root,
         edition = edition,
-        rustc_env_files = [":cargo_toml_env_vars"],
+        rustc_env_files = ["cargo_toml_env_vars.env"],
         rustc_flags = rustc_flags + ["--cap-lints=allow"],
         tags = tags,
         target_compatible_with = target_compatible_with,

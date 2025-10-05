@@ -1,20 +1,22 @@
+def parse_full_version(v):
+    # Strip build metadata first (e.g., "+001")
+    v_no_build = v.split("+", 1)[0]
+    # Split out prerelease (e.g., "-alpha.1")
+    parts = v_no_build.split("-", 1)
+    core = parts[0]
+    pre = parts[1] if len(parts) > 1 else ""
+
+    # Parse core "x.y.z" (pad missing parts with 0)
+    comps = core.split(".")
+    major = int(comps[0]) if len(comps) > 0 else 0
+    minor = int(comps[1]) if len(comps) > 1 else 0
+    patch = int(comps[2]) if len(comps) > 2 else 0
+
+    # Return major, minor, patch, and prerelease (string)
+    return (major, minor, patch, pre)
+
 def _parse_version(v):
-    # Drop prerelease/build if present (e.g., 1.2.3-alpha+001)
-    v = v.split("-", 1)[0].split("+", 1)[0]
-    parts = v.split(".")
-    # Pad to 3 components
-    nums = []
-    for i in range(3):
-        if i < len(parts) and parts[i] != "":
-            # Allow leading zeros; treat non-numeric as 0
-            #try:
-            nums.append(int(parts[i]))
-            #except:
-            #    nums.append(0)
-        else:
-            nums.append(0)
-    # major, minor, patch
-    return tuple(nums)
+    return parse_full_version(v)[:3]
 
 def _cmp(a, b):
     for i in range(3):
@@ -39,20 +41,6 @@ def _cargo_default_upper_bound(base):
     if patch != 0:
         return (0, 0, patch + 1)
     return (1, 0, 0)
-
-def _range_for_caret(req_ver_tuple):
-    low = req_ver_tuple
-    high = _cargo_default_upper_bound(req_ver_tuple)
-    return (low, high)
-
-def _satisfies_caret(req_tuple, ver_tuple):
-    low, high = _range_for_caret(req_tuple)
-    return _cmp(ver_tuple, low) >= 0 and _cmp(ver_tuple, high) < 0
-
-def _satisfies_caret_or_bare(req_tuple, ver_tuple):
-    lo = req_tuple
-    hi = _cargo_default_upper_bound(req_tuple)
-    return _cmp(ver_tuple, lo) >= 0 and _cmp(ver_tuple, hi) < 0
 
 def _parse_comparator_req(req):
     for op in (">=", ">", "=", "<=", "<"):
