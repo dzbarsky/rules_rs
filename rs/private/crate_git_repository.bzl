@@ -53,7 +53,7 @@ def _crate_git_repository_implementation(rctx):
             if type(value) == "dict" and value.get("workspace") == True:
                 crate_package[field] = workspace_package.get(field)
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx.attr, cargo_toml))
+    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 

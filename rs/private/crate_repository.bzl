@@ -20,7 +20,7 @@ def _crate_repository_impl(rctx):
         wasm_blob = None
     cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx.attr, cargo_toml))
+    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 

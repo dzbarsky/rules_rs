@@ -1,17 +1,18 @@
 
-def generate_build_file(attr, cargo_toml):
+def generate_build_file(rctx, cargo_toml):
+    attr = rctx.attr
     package = cargo_toml["package"]
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
 
-    if attr.gen_build_script == "off":
-        build_script = False
+    if attr.gen_build_script == "off" or bazel_metadata.get("gen_build_script") == False:
+        build_script = None
     else:
-        # What does `on` do? Fail the build if we don't detect one?
+        # What does `gen_build_script="on"` do? Fail the build if we don't detect one?
         build_script = package.get("build")
         if build_script:
             build_script = build_script.removeprefix("./")
-        if bazel_metadata.get("gen_build_script") == False:
-            build_script = False
+        elif rctx.path("build.rs").exists:
+            build_script = "build.rs"
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False

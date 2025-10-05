@@ -48,9 +48,6 @@ def rust_crate(
         "norustfmt",
     ]
 
-    if not build_script and build_script != False and len(native.glob(["build.rs"], allow_empty = True)) == 1:
-        build_script = "build.rs"
-
     cargo_toml_env_vars(
         name = "cargo_toml_env_vars",
         src = "Cargo.toml",
