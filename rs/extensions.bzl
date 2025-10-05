@@ -5,6 +5,8 @@ load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 _DEFAULT_CRATE_ANNOTATION = struct(
+    additive_build_file = None,
+    additive_build_file_content = "",
     gen_build_script = "auto",
     build_script_data = [],
     build_script_env = {},
@@ -639,6 +641,8 @@ def _generate_hub_and_spokes(
             annotation = _DEFAULT_CRATE_ANNOTATION
 
         kwargs = dict(
+            additive_build_file = annotation.additive_build_file,
+            additive_build_file_content = annotation.additive_build_file_content,
             gen_build_script = annotation.gen_build_script,
             build_deps = sorted(all_platform_build_deps),
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
@@ -853,12 +857,12 @@ _annotation = tag_class(
         #     default = "*",
         # ),
     } | {
-        # "additive_build_file": attr.label(
-        #     doc = "A file containing extra contents to write to the bottom of generated BUILD files.",
-        # ),
-        # "additive_build_file_content": attr.string(
-        #     doc = "Extra contents to write to the bottom of generated BUILD files.",
-        # ),
+        "additive_build_file": attr.label(
+            doc = "A file containing extra contents to write to the bottom of generated BUILD files.",
+        ),
+        "additive_build_file_content": attr.string(
+            doc = "Extra contents to write to the bottom of generated BUILD files.",
+        ),
         # "alias_rule": attr.string(
         #     doc = "Alias rule to use instead of `native.alias()`.  Overrides [render_config](#render_config)'s 'default_alias_rule'.",
         # ),

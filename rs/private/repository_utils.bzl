@@ -61,6 +61,9 @@ rust_crate(
 
 """
 
+    if attr.additive_build_file:
+        build_content += rctx.read(attr.additive_build_file)
+    build_content += attr.additive_build_file_content
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
     return build_content.format(
@@ -88,6 +91,8 @@ rust_crate(
     )
 
 common_attrs = {
+    "additive_build_file": attr.label(),
+    "additive_build_file_content": attr.string(),
     "gen_build_script": attr.string(),
     "build_deps": attr.label_list(default = []),
     "conditional_build_deps": attr.string(default = ""),
