@@ -57,20 +57,11 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return name + "-" + version
 
-_ALL_PLATFORMS = "*"
-
 def _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
-    triples = platform_triples + [_ALL_PLATFORMS]
-    features_enabled = {triple: set() for triple in triples}
-    deps = {triple: set() for triple in triples}
-
     return struct(
-        features_enabled = features_enabled,
-        # Fast-path for access
-        features_enabled_for_all_platforms = features_enabled[_ALL_PLATFORMS],
-
-        build_deps = {triple: set() for triple in triples},
-        deps = deps,
+        features_enabled = {triple: set() for triple in platform_triples},
+        build_deps = {triple: set() for triple in platform_triples},
+        deps = {triple: set() for triple in platform_triples},
         aliases = {},
         package_index = package_index,
 
@@ -103,7 +94,6 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
 
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
-        features_enabled_for_all_platforms = feature_resolutions.features_enabled_for_all_platforms
 
         deps = feature_resolutions.deps
 
@@ -130,16 +120,13 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
             has_alias = "package" in dep
             dep_name = dep["name"]
             prefixed_dep_alias = "dep:" + dep_name
-            disabled_on_all_platforms = dep.get("optional", False) and dep_name not in features_enabled_for_all_platforms and prefixed_dep_alias not in features_enabled_for_all_platforms
+            optional = dep.get("optional", False)
 
             to_remove = None
             match = dep["target"]
 
             for triple in match:
-                if disabled_on_all_platforms:
-                    if triple == _ALL_PLATFORMS:
-                        continue
-
+                if optional:
                     features_for_triple = features_enabled[triple]
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
@@ -368,8 +355,7 @@ def _generate_hub_and_spokes(
 
     feature_resolutions_by_fq_crate = dict()
 
-    # TODO(zbarsky): Figure out how to do this optimization safely.
-    # match_all = [_ALL_PLATFORMS]
+    # TODO(zbarsky): Would be nice to resolve for _ALL_PLATFORMS instead of per-triple, but it's complicated.
     cfg_match_cache = {None: platform_triples}
 
     for package_index in range(len(packages)):
@@ -596,7 +582,9 @@ def _generate_hub_and_spokes(
     for crate, annotation in annotations.items():
         if annotation.crate_features:
             for version in versions_by_name.get(crate, []):
-                feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled_for_all_platforms.update(annotation.crate_features)
+                features_enabled = feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled
+                for triple in platform_triples:
+                    features_enabled[triple].update(annotation.crate_features)
 
     _date(mctx, "set up initial deps!")
 
@@ -624,9 +612,9 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
-        all_platform_deps = feature_resolutions.deps.pop(_ALL_PLATFORMS)
-        all_platform_build_deps = feature_resolutions.build_deps.pop(_ALL_PLATFORMS)
-        features_enabled = feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
+        all_platform_deps = set() #feature_resolutions.deps.pop(_ALL_PLATFORMS)
+        all_platform_build_deps = set() # feature_resolutions.build_deps.pop(_ALL_PLATFORMS)
+        features_enabled = set() #feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
 
         # Remove conditional deps that are present on all platforms already.
         for deps in feature_resolutions.deps.values():

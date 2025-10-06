@@ -1,12 +1,12 @@
 DISABLED = [
     "annotation_crate_features",
-    "build_script_aliases",
-    "build_script_runtime_env",
-    "build_dep_features",
-    "feature_name_overrides_implicit_dep",
+    #"build_script_aliases",
+    #"build_script_runtime_env",
+    #"build_dep_features",
+    #"feature_name_overrides_implicit_dep",
     #"many_workspace_deps",
-    "multiple_versions_for_dependency",
-    "platform_dep_features",
+    #"multiple_versions_for_dependency",
+    #"platform_dep_features",
 ]
 TESTS = [f for f in glob(["*"], exclude_directories = 0) if "." not in f and "bazel-" not in f and f not in DISABLED]
 

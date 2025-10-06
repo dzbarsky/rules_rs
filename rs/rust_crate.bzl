@@ -72,6 +72,7 @@ def rust_crate(
             deps = [":_bs_deps"],
             link_deps = deps,
             build_script_env = build_script_env,
+            build_script_env_files = ["cargo_toml_env_vars.env"],
             toolchains = build_script_toolchains,
             proc_macro_deps = [":_bs_proc_macro_deps"],
             edition = edition,

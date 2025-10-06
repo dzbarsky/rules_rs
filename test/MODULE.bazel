@@ -11,9 +11,14 @@ use_repo(llvm, "llvm_toolchain")
 register_toolchains("@llvm_toolchain//:all")
 
 bazel_dep(name = "rules_rust", version = "0.65.0")
-local_path_override(
+#local_path_override(
+#    module_name = "rules_rust",
+#    path = "../../rules_rust",
+#)
+archive_override(
     module_name = "rules_rust",
-    path = "../../rules_rust",
+    url = "https://github.com/bazelbuild/rules_rust/archive/ad24943310afc5ce70114e8d318548f428e3e98f.tar.gz",
+    strip_prefix = "rules_rust-ad24943310afc5ce70114e8d318548f428e3e98f",
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -66,19 +71,6 @@ TESTS = [
 ]
 
 [use_repo(crate, test) for test in TESTS]
-
-crate.annotation(
-    crate = "rav1e",
-    # Needed due to https://github.com/bazelbuild/rules_rust/issues/3625
-    build_script_env = {
-        "CARGO_PKG_AUTHORS": "",
-        "CARGO_PKG_DESCRIPTION": "",
-        "CARGO_PKG_HOMEPAGE": "",
-        "CARGO_PKG_LICENSE": "",
-        "CARGO_PKG_REPOSITORY": "",
-        "RUSTDOC": "",
-    },
-)
 
 crate.annotation(
     crate = "rustls",
