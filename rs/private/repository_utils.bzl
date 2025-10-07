@@ -1,6 +1,27 @@
 
 load(":semver.bzl", "parse_full_version")
 
+def _platform(triple):
+    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
+
+def _select(platform_items):
+    branches = []
+
+    for triple, items in platform_items.items():
+        if items:
+            branches.append((_platform(triple), repr(items)))
+
+    if not branches:
+        return ""
+
+    branches.append(("//conditions:default", "[]"))
+
+    return """select({
+        %s
+    })""" % (
+        ",\n        ".join(['"%s": %s' % branch for branch in branches])
+    )
+
 def generate_build_file(rctx, cargo_toml):
     attr = rctx.attr
     package = cargo_toml["package"]
@@ -99,16 +120,20 @@ rust_crate(
     build_content += attr.additive_build_file_content
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
+    conditional_crate_features = _select(attr.crate_features_select)
+    conditional_build_deps = _select(attr.build_deps_select)
+    conditional_deps = _select(attr.deps_select)
+
     return build_content.format(
         name = repr(name),
         crate_name = repr(crate_name),
         version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % (k, v) for (k, v) in attr.aliases.items()]),
         deps = ",\n        ".join(['"%s"' % d for d in attr.deps + bazel_metadata.get("deps", [])]),
-        conditional_deps = attr.conditional_deps,
+        conditional_deps = " + " + conditional_deps if conditional_deps else "",
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
-        crate_features = attr.crate_features,
-        conditional_crate_features = attr.conditional_crate_features,
+        crate_features = repr(attr.crate_features),
+        conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
         lib_path = repr(lib_path),
         edition = repr(edition),
         rustc_flags = repr(attr.rustc_flags or []),
@@ -117,7 +142,7 @@ rust_crate(
         build_script = repr(build_script),
         build_script_data = ",\n        ".join(['"%s"' % d for d in attr.build_script_data]),
         build_deps = ",\n        ".join(['"%s"' % d for d in attr.build_deps]),
-        conditional_build_deps = attr.conditional_build_deps,
+        conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
         build_script_env = repr(attr.build_script_env),
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
         is_proc_macro = repr(is_proc_macro),
@@ -128,17 +153,17 @@ common_attrs = {
     "additive_build_file_content": attr.string(),
     "gen_build_script": attr.string(),
     "build_deps": attr.label_list(default = []),
-    "conditional_build_deps": attr.string(default = ""),
+    "build_deps_select": attr.string_list_dict(),
     "build_script_data": attr.label_list(default = []),
     "build_script_env": attr.string_dict(),
     "build_script_toolchains": attr.label_list(),
     "rustc_flags": attr.string_list(),
     "data": attr.label_list(default = []),
     "deps": attr.string_list(default = []),
-    "conditional_deps": attr.string(default = ""),
+    "deps_select": attr.string_list_dict(),
     "aliases": attr.string_dict(),
-    "crate_features": attr.string(mandatory = True),
-    "conditional_crate_features": attr.string(default = ""),
+    "crate_features": attr.string_list(),
+    "crate_features_select": attr.string_list_dict(),
     "target_compatible_with": attr.string_list(mandatory = True),
     "use_wasm": attr.bool(),
 } | {

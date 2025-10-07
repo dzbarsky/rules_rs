@@ -29,24 +29,8 @@ def _spoke_repo(hub_name, name, version):
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
 
-
-def _select(platform_items):
-    branches = []
-
-    for triple, items in platform_items.items():
-        if items:
-            branches.append((_platform(triple), repr(sorted(items))))
-
-    if not branches:
-        return ""
-
-    branches.append(("//conditions:default", "[]"))
-
-    return """select({
-        %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
+def _select(items):
+    return {k: sorted(v) for k, v in items.items()}
 
 def _add_to_dict(d, k, v):
     existing = d.get(k, [])
@@ -211,9 +195,8 @@ def _propagate_feature_enablement(
                             dirty_package_indices.add(dep_feature_resolutions.package_index)
                         break
 
-                if not found:
-                    if debug:
-                        print("Skipping enabling subfeature", feature, "for", package["name"], "@", package["version"], "it's not a dep...")
+                if not found and debug:
+                    print("Skipping enabling subfeature", feature, "for", package["name"], "@", package["version"], "it's not a dep...")
 
     return package_changed
 
@@ -612,18 +595,6 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
-        all_platform_deps = set() #feature_resolutions.deps.pop(_ALL_PLATFORMS)
-        all_platform_build_deps = set() # feature_resolutions.build_deps.pop(_ALL_PLATFORMS)
-        features_enabled = set() #feature_resolutions.features_enabled.pop(_ALL_PLATFORMS)
-
-        # Remove conditional deps that are present on all platforms already.
-        for deps in feature_resolutions.deps.values():
-            deps.difference_update(all_platform_deps)
-
-        conditional_deps = _select(feature_resolutions.deps)
-        conditional_build_deps = _select(feature_resolutions.build_deps)
-        conditional_crate_features = _select(feature_resolutions.features_enabled)
-
         annotation = annotations.get(crate_name)
         if not annotation:
             annotation = _DEFAULT_CRATE_ANNOTATION
@@ -632,18 +603,18 @@ def _generate_hub_and_spokes(
             additive_build_file = annotation.additive_build_file,
             additive_build_file_content = annotation.additive_build_file_content,
             gen_build_script = annotation.gen_build_script,
-            build_deps = sorted(all_platform_build_deps),
-            conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
+            build_deps = [],
+            build_deps_select = _select(feature_resolutions.build_deps),
             build_script_data = annotation.build_script_data,
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
             rustc_flags = annotation.rustc_flags,
             data = annotation.data,
-            deps = sorted(all_platform_deps | set(annotation.deps)),
-            conditional_deps = " + " + conditional_deps if conditional_deps else "",
+            deps = annotation.deps,
+            deps_select = _select(feature_resolutions.deps),
             aliases = feature_resolutions.aliases,
-            crate_features = repr(sorted(features_enabled | set(annotation.crate_features))),
-            conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
+            crate_features = annotation.crate_features,
+            crate_features_select = _select(feature_resolutions.features_enabled),
             target_compatible_with = target_compatible_with,
             use_wasm = wasm_blob != None,
             patch_args = annotation.patch_args,
