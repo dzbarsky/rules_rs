@@ -4,7 +4,17 @@ load(":semver.bzl", "parse_full_version")
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
 
+def _format_branches(branches):
+    return """select({
+        %s
+    })""" % (
+        ",\n        ".join(['"%s": %s' % branch for branch in branches])
+    )
+
 def _select(non_platform_items, platform_items):
+    if not platform_items:
+        return non_platform_items, ""
+
     item_values = platform_items.values()
     common_items = set(item_values[0])
     for values in item_values[1:]:
@@ -24,13 +34,22 @@ def _select(non_platform_items, platform_items):
     if not branches:
         return common_items, ""
 
-    branches.append(("//conditions:default", "[]"))
+    branches.append(("//conditions:default", "[],"))
 
-    return common_items, """select({
-        %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
+    return common_items, _format_branches(branches)
+
+def _select_build_script_env(platform_items):
+    branches = [
+        (_platform(triple), items)
+        for triple, items in platform_items.items()
+    ]
+
+    if not branches:
+        return ""
+
+    branches.append(("//conditions:default", "{},"))
+
+    return _format_branches(branches)
 
 def generate_build_file(rctx, cargo_toml):
     attr = rctx.attr
@@ -116,7 +135,7 @@ rust_crate(
     build_deps = [
         {build_deps}
     ]{conditional_build_deps},
-    build_script_env = {build_script_env},
+    build_script_env = {build_script_env}{conditional_build_script_env},
     build_script_toolchains = {build_script_toolchains},
     is_proc_macro = {is_proc_macro},
 )
@@ -129,8 +148,11 @@ rust_crate(
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
     crate_features, conditional_crate_features = _select(attr.crate_features, attr.crate_features_select)
-    build_deps, conditional_build_deps = _select(attr.build_deps, attr.build_deps_select)
+    build_deps, conditional_build_deps = _select(attr.build_script_deps, attr.build_script_deps_select)
+    build_script_data, conditional_build_script_data = _select(attr.build_script_data, attr.build_script_data_select)
     deps, conditional_deps = _select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
+
+    conditional_build_script_env = _select_build_script_env(attr.build_script_env_select)
 
     return build_content.format(
         name = repr(name),
@@ -148,10 +170,12 @@ rust_crate(
         target_compatible_with = ",\n        ".join(['"%s": []' % t for t in attr.target_compatible_with]),
         links = repr(links),
         build_script = repr(build_script),
-        build_script_data = repr(attr.build_script_data),
+        build_script_data = repr(build_script_data),
+        conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_deps = ",\n        ".join(['"%s"' % d for d in sorted(build_deps)]),
         conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
         build_script_env = repr(attr.build_script_env),
+        conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
         is_proc_macro = repr(is_proc_macro),
     )
@@ -160,10 +184,12 @@ common_attrs = {
     "additive_build_file": attr.label(),
     "additive_build_file_content": attr.string(),
     "gen_build_script": attr.string(),
-    "build_deps": attr.label_list(default = []),
-    "build_deps_select": attr.string_list_dict(),
+    "build_script_deps": attr.label_list(default = []),
+    "build_script_deps_select": attr.string_list_dict(),
     "build_script_data": attr.label_list(default = []),
+    "build_script_data_select": attr.string_list_dict(),
     "build_script_env": attr.string_dict(),
+    "build_script_env_select": attr.string_dict(),
     "build_script_toolchains": attr.label_list(),
     "rustc_flags": attr.string_list(),
     "data": attr.label_list(default = []),

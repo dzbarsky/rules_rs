@@ -44,6 +44,7 @@ TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
     "build_script_aliases",
+    "build_script_env_select",
     "build_script_runtime_env",
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
@@ -77,4 +78,14 @@ crate.annotation(
     repositories = ["annotation_crate_features"],
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
     crate_features = ["fips"],
+)
+
+crate.annotation(
+    crate = "bitflags",
+    repositories = ["build_script_env_select"],
+    # Smoketest that we do something reasonable with this attribute
+    build_script_env_select = {
+        "aarch64-apple-darwin": '{"OS": "darwin"}',
+        "x86_64-unknown-linux-musl": '{"OS": "linux"}',
+    },
 )

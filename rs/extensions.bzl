@@ -9,7 +9,9 @@ _DEFAULT_CRATE_ANNOTATION = struct(
     additive_build_file_content = "",
     gen_build_script = "auto",
     build_script_data = [],
+    build_script_data_select = {},
     build_script_env = {},
+    build_script_env_select = {},
     build_script_toolchains = [],
     data = [],
     deps = [],
@@ -603,11 +605,13 @@ def _generate_hub_and_spokes(
             additive_build_file = annotation.additive_build_file,
             additive_build_file_content = annotation.additive_build_file_content,
             gen_build_script = annotation.gen_build_script,
-            build_deps = [],
-            build_deps_select = _select(feature_resolutions.build_deps),
+            build_script_deps = [],
+            build_script_deps_select = _select(feature_resolutions.build_deps),
             build_script_data = annotation.build_script_data,
+            build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
+            build_script_env_select = annotation.build_script_env_select,
             rustc_flags = annotation.rustc_flags,
             data = annotation.data,
             deps = annotation.deps,
@@ -831,18 +835,18 @@ _annotation = tag_class(
         # "build_script_data_glob": attr.string_list(
         #     doc = "A list of glob patterns to add to a crate's `cargo_build_script::data` attribute",
         # ),
-        # "build_script_data_select": attr.string_list_dict(
-        #     doc = "A list of labels to add to a crate's `cargo_build_script::data` attribute. Keys should be the platform triplet. Value should be a list of labels.",
-        # ),
+        "build_script_data_select": attr.string_list_dict(
+            doc = "A list of labels to add to a crate's `cargo_build_script::data` attribute. Keys should be the platform triplet. Value should be a list of labels.",
+        ),
         # "build_script_deps": _relative_label_list(
         #     doc = "A list of labels to add to a crate's `cargo_build_script::deps` attribute.",
         # ),
         "build_script_env": attr.string_dict(
             doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute.",
         ),
-        # "build_script_env_select": attr.string_dict(
-        #     doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute. Key should be the platform triplet. Value should be a JSON encoded dictionary mapping variable names to values, for example `{\"FOO\": \"bar\"}`.",
-        # ),
+        "build_script_env_select": attr.string_dict(
+            doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute. Key should be the platform triplet. Value should be a JSON encoded dictionary mapping variable names to values, for example `{\"FOO\": \"bar\"}`.",
+        ),
         # "build_script_link_deps": _relative_label_list(
         #     doc = "A list of labels to add to a crate's `cargo_build_script::link_deps` attribute.",
         # ),
