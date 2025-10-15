@@ -4,7 +4,8 @@ module(
     name = "rules_rs",
 )
 
-bazel_dep(name = "rules_rust", version = "0.65.0")
+bazel_dep(name = "rules_rust", version = "0.66.0")
+
 # TODO(zbarsky): A bit unfortunate that we need to define a new set of host tools instead of reusing the existing one pulled in by rules_rust.
 # Can we figure out how to access that? Perhaps add an alias?
 rust_host_tools = use_extension("@rules_rust//rust:extensions.bzl", "rust_host_tools")
@@ -17,12 +18,13 @@ use_repo(
 )
 
 cargo_bootstrap_repository = use_repo_rule("@rules_rust//cargo:defs.bzl", "cargo_bootstrap_repository")
+
 cargo_bootstrap_repository(
     name = "toml2json_host_bin",
-    binary = "toml2json",
     srcs = ["//toml2json:src/main.rs"],
-    cargo_toml = "//toml2json:Cargo.toml",
+    binary = "toml2json",
     cargo_lockfile = "//toml2json:Cargo.lock",
+    cargo_toml = "//toml2json:Cargo.toml",
     rust_toolchain_cargo_template = "@rust_host_tools//:bin/{tool}",
     rust_toolchain_rustc_template = "@rust_host_tools//:bin/{tool}",
 )
