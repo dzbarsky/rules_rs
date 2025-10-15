@@ -1,3 +1,4 @@
+load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
 load("@rules_rust//cargo/private:cargo_build_script_wrapper.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
@@ -21,6 +22,16 @@ def rust_crate(
         build_script_env,
         build_script_toolchains,
         is_proc_macro):
+
+    package_metadata(
+        name = "package_metadata",
+        # TODO(zbarsky): repository url for git deps?
+        purl = "pkg:cargo/%s/%s" % (crate_name, version),
+        visibility = ["//visibility:public"],
+    )
+
+    native.package(default_package_metadata = ["//:package_metadata"])
+
     compile_data = native.glob(
         include = ["**"],
         exclude = [
