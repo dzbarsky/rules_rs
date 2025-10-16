@@ -53,6 +53,8 @@ TESTS = [
         name = test,
         cargo_lock = "//:%s/Cargo.lock" % test,
         cargo_toml = "//:%s/Cargo.toml" % test,
+        # cargo_config = "//:.cargo/config.toml",
+        # use_home_cargo_credentials = True,
         #debug = True,
         platform_triples = [
             "aarch64-apple-darwin",
