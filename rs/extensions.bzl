@@ -78,8 +78,6 @@ def _git_url_to_cargo_toml(url):
     return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_git_url(url)
 
 def _sharded_path(crate):
-    crate = crate.lower()
-
     # crates.io-index sharding rules (ASCII names)
     n = len(crate)
     if n == 0:
@@ -91,9 +89,6 @@ def _sharded_path(crate):
     if n == 3:
         return "3/%s/%s" % (crate[0], crate)
     return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
-
-def _is_sparse_registry(source):
-    return source == "registry+https://github.com/rust-lang/crates.io-index" or source.startswith("sparse+")
 
 def _date(ctx, label):
     return
@@ -133,24 +128,26 @@ def _generate_hub_and_spokes(
     workspace_members = [p for p in cargo_lock["package"] if "source" not in p]
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
-    sparse_registries = set([package["source"].removeprefix("sparse+") for package in packages if package["source"].startswith("sparse+")])
-    download_tokens = {}
-    for source in sparse_registries:
+    sparse_registry_configs = {}
+    for package in packages:
+        source = package["source"]
+        if source == "registry+https://github.com/rust-lang/crates.io-index":
+            source = "sparse+https://index.crates.io/"
+            package["source"] = source
+        elif not source.startswith("sparse+"):
+            continue
+
+        if source in sparse_registry_configs:
+            continue
+
+        registry = source.removeprefix("sparse+")
+
         # TODO(zbarsky): Need to plumb auth here
-        download_tokens[source] = mctx.download(
-            source + "config.json",
+        sparse_registry_configs[source] = mctx.download(
+            registry + "config.json",
             source.replace("/", "_") + "config.json",
             block = False,
         )
-
-    registry_configs = {}
-    for source, token in download_tokens.items():
-        result = token.wait()
-        if not result.success:
-            fail("Could not download")
-
-        # TODO(zbarsky): We don't need these until crate download time.
-        registry_configs[source] = json.decode(mctx.read(source.replace("/", "_") + "config.json"))
 
     download_tokens = []
 
@@ -163,7 +160,7 @@ def _generate_hub_and_spokes(
 
         source = package["source"]
 
-        if source == "registry+https://github.com/rust-lang/crates.io-index":
+        if source.startswith("sparse+"):
             key = name + "_" + version
             fact = existing_facts.get(key)
             if fact:
@@ -171,18 +168,7 @@ def _generate_hub_and_spokes(
                 continue
 
             # TODO(zbarsky): dedupe fetches when multiple versions?
-            url = "https://index.crates.io/" + _sharded_path(name)
-            token = mctx.download(url, key + ".jsonl", block = False)
-            download_tokens.append(token)
-        elif source.startswith("sparse+"):
-            key = name + "_" + version
-            fact = existing_facts.get(key)
-            if fact:
-                facts[key] = fact
-                continue
-
-            # TODO(zbarsky): dedupe fetches when multiple versions?
-            url = source.removeprefix("sparse+") + _sharded_path(name)
+            url = source.removeprefix("sparse+") + _sharded_path(name.lower())
             token = mctx.download(url, key + ".jsonl", block = False)
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
@@ -241,7 +227,7 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        if _is_sparse_registry(source):
+        if source.startswith("sparse+"):
             key = name + "_" + version
             fact = facts.get(key)
             if fact:
@@ -431,8 +417,10 @@ def _generate_hub_and_spokes(
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
-            if not _is_sparse_registry(dep["source"]):
+            source = dep["source"]
+            if source != "registry+https://github.com/rust-lang/crates.io-index" and not source.startswith("sparse+"):
                 continue
+
             name = dep["name"]
             workspace_deps.add(name)
 
@@ -466,6 +454,19 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
+
+    for source, token in sparse_registry_configs.items():
+        result = token.wait()
+        if not result.success:
+            fail("Could not download")
+
+        # TODO(zbarsky): auth token?
+        dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
+
+        if "{crate}" not in dl and "{version}" not in dl and "{sha256-checksum}" not in dl and "{prefix}" not in dl and "{lowerprefix}" not in dl:
+            dl += "/{crate}/{version}/download"
+
+        sparse_registry_configs[source] = dl
 
     mctx.report_progress("Initializing spokes")
 
@@ -509,17 +510,24 @@ def _generate_hub_and_spokes(
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
 
-        if _is_sparse_registry(source):
+        if source.startswith("sparse+"):
+            checksum = package["checksum"]
+            url = sparse_registry_configs[source].format(**{
+                "crate": crate_name,
+                "version": version,
+                "prefix": _sharded_path(crate_name),
+                "lowerprefix": _sharded_path(crate_name.lower()),
+                "sha256-checksum": checksum,
+            })
+
             if dry_run:
                 continue
 
-            name_version = (crate_name, version)
-
             crate_repository(
                 name = repo_name,
-                url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
-                strip_prefix = "%s-%s" % name_version,
-                checksum = package["checksum"],
+                url = url,
+                strip_prefix = "%s-%s" % (crate_name, version),
+                checksum = checksum,
                 **kwargs
             )
         else:
