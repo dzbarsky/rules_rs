@@ -156,7 +156,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, debug):
         if not dirty_package_indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
-                print("Got count", count, "in", i, "rounds")
+                print("Got count", count, "in", i + 1, "rounds")
             break
         dirty_package_indices = sorted(dirty_package_indices)
 

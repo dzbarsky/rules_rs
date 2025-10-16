@@ -1,3 +1,5 @@
+load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
+load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository")
@@ -70,16 +72,19 @@ def _parse_git_url(url):
     # Strip query parameters
     base = base.split("?")[0]
 
-    repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
+    remote = base.removeprefix("git+")
 
+    return remote, sha
+
+def _parse_github_url(url):
+    remote, sha = _parse_git_url(url)
+    repo_path = remote.removeprefix("https://github.com/").removesuffix(".git")
     return repo_path, sha
 
-def _git_url_to_cargo_toml(url):
-    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_git_url(url)
+def _github_url_to_cargo_toml(url):
+    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_github_url(url)
 
 def _sharded_path(crate):
-    crate = crate.lower()
-
     # crates.io-index sharding rules (ASCII names)
     n = len(crate)
     if n == 0:
@@ -91,9 +96,6 @@ def _sharded_path(crate):
     if n == 3:
         return "3/%s/%s" % (crate[0], crate)
     return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
-
-def _is_sparse_registry(source):
-    return source == "registry+https://github.com/rust-lang/crates.io-index" or source.startswith("sparse+")
 
 def _date(ctx, label):
     return
@@ -107,6 +109,8 @@ def _generate_hub_and_spokes(
         annotations,
         cargo_lock_path,
         platform_triples,
+        cargo_credentials,
+        cargo_config,
         debug,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
@@ -118,6 +122,8 @@ def _generate_hub_and_spokes(
         annotations (dict): Annotation tags to apply.
         cargo_lock_path (path): Cargo.lock path
         platform_triples (list[string]): Triples to resolve for
+        cargo_credentials (dict): Mapping of registry to auth token.
+        cargo_config (label): .cargo/config.toml file
         debug (bool): Enable debug logging
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
@@ -133,24 +139,26 @@ def _generate_hub_and_spokes(
     workspace_members = [p for p in cargo_lock["package"] if "source" not in p]
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
-    sparse_registries = set([package["source"].removeprefix("sparse+") for package in packages if package["source"].startswith("sparse+")])
-    download_tokens = {}
-    for source in sparse_registries:
-        # TODO(zbarsky): Need to plumb auth here
-        download_tokens[source] = mctx.download(
-            source + "config.json",
+    sparse_registry_configs = {}
+    for package in packages:
+        source = package["source"]
+        if source == "registry+https://github.com/rust-lang/crates.io-index":
+            source = "sparse+https://index.crates.io/"
+            package["source"] = source
+        elif not source.startswith("sparse+"):
+            continue
+
+        if source in sparse_registry_configs:
+            continue
+
+        registry = source.removeprefix("sparse+")
+
+        sparse_registry_configs[source] = mctx.download(
+            registry + "config.json",
             source.replace("/", "_") + "config.json",
+            headers = registry_auth_headers(cargo_credentials, source),
             block = False,
         )
-
-    registry_configs = {}
-    for source, token in download_tokens.items():
-        result = token.wait()
-        if not result.success:
-            fail("Could not download")
-
-        # TODO(zbarsky): We don't need these until crate download time.
-        registry_configs[source] = json.decode(mctx.read(source.replace("/", "_") + "config.json"))
 
     download_tokens = []
 
@@ -163,7 +171,7 @@ def _generate_hub_and_spokes(
 
         source = package["source"]
 
-        if source == "registry+https://github.com/rust-lang/crates.io-index":
+        if source.startswith("sparse+"):
             key = name + "_" + version
             fact = existing_facts.get(key)
             if fact:
@@ -171,31 +179,46 @@ def _generate_hub_and_spokes(
                 continue
 
             # TODO(zbarsky): dedupe fetches when multiple versions?
-            url = "https://index.crates.io/" + _sharded_path(name)
-            token = mctx.download(url, key + ".jsonl", block = False)
+            url = source.removeprefix("sparse+") + _sharded_path(name.lower())
+            token = mctx.download(
+                url,
+                key + ".jsonl",
+                headers = registry_auth_headers(cargo_credentials, source),
+                block = False,
+            )
             download_tokens.append(token)
-        elif source.startswith("sparse+"):
-            key = name + "_" + version
-            fact = existing_facts.get(key)
-            if fact:
-                facts[key] = fact
-                continue
-
-            # TODO(zbarsky): dedupe fetches when multiple versions?
-            url = source.removeprefix("sparse+") + _sharded_path(name)
-            token = mctx.download(url, key + ".jsonl", block = False)
-            download_tokens.append(token)
-        elif source.startswith("git+https://github.com/"):
-            # TODO(zbarsky): Support other forges
+        elif source.startswith("git+"):
             key = source + "_" + name
             fact = existing_facts.get(key)
             if fact:
                 facts[key] = fact
                 continue
 
-            url = _git_url_to_cargo_toml(source)
-            token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
-            download_tokens.append(token)
+            if source.startswith("git+https://github.com/"):
+                url = _github_url_to_cargo_toml(source)
+                token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
+                download_tokens.append(token)
+            else:
+                # TODO(zbarsky): Ideally other forges could use the single-file fastpath...
+                remote, commit = _parse_git_url(source)
+                directory = mctx.path(source.replace("/", "_"))
+                clone_config = struct(
+                    delete = lambda _: 0,
+                    execute = mctx.execute,
+                    os = mctx.os,
+                    name = hub_name,
+                    path = mctx.path,
+                    report_progress = mctx.report_progress,
+                    attr = struct(
+                        shallow_since = "",
+                        commit = commit,
+                        remote = remote,
+                        init_submodules = True,
+                        recursive_init_submodules = True,
+                        verbose = debug,
+                    ),
+                )
+                git_repo(clone_config, directory)
         else:
             fail("Unknown source " + source)
 
@@ -241,7 +264,7 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        if _is_sparse_registry(source):
+        if source.startswith("sparse+"):
             key = name + "_" + version
             fact = facts.get(key)
             if fact:
@@ -286,9 +309,15 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
-                strip_prefix = None
-                cargo_toml_json = run_toml2json(mctx, wasm_blob, "%s_%s.Cargo.toml" % (name, version))
+                if source.startswith("git+https://github.com/"):
+                    cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
+                else:
+                    # Non-github forges do a shallow clone into a child directory.
+                    cargo_toml_json_path = source.replace("/", "_") + "/Cargo.toml"
 
+                cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
+
+                strip_prefix = None
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
                     if name in workspace["members"]:
@@ -302,12 +331,16 @@ def _generate_hub_and_spokes(
 
                     if strip_prefix:
                         package["strip_prefix"] = strip_prefix
-                        download_path = strip_prefix + ".Cargo.toml"
-                        url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                        result = mctx.download(url, download_path)
-                        if not result.success:
-                            fail("Could not download")
-                        cargo_toml_json = run_toml2json(mctx, wasm_blob, download_path)
+                        if source.startswith("git+https://github.com/"):
+                            child_cargo_toml_json_path = strip_prefix + ".Cargo.toml"
+                            url = _github_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+                            result = mctx.download(url, child_cargo_toml_json_path)
+                            if not result.success:
+                                fail("Could not download")
+                        else:
+                            child_cargo_toml_json_path = cargo_toml_json_path.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+
+                        cargo_toml_json = run_toml2json(mctx, wasm_blob, child_cargo_toml_json_path)
 
                 dependencies = []
                 for dep, spec in cargo_toml_json.get("dependencies", {}).items():
@@ -431,8 +464,10 @@ def _generate_hub_and_spokes(
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
-            if not _is_sparse_registry(dep["source"]):
-                continue
+            source = dep["source"]
+            #if source != "registry+https://github.com/rust-lang/crates.io-index" and not source.startswith("sparse+"):
+            #    continue
+
             name = dep["name"]
             workspace_deps.add(name)
 
@@ -467,9 +502,23 @@ def _generate_hub_and_spokes(
 
     resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
 
+    for source, token in sparse_registry_configs.items():
+        result = token.wait()
+        if not result.success:
+            fail("Could not download")
+
+        # TODO(zbarsky): auth token?
+        dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
+
+        if "{crate}" not in dl and "{version}" not in dl and "{sha256-checksum}" not in dl and "{prefix}" not in dl and "{lowerprefix}" not in dl:
+            dl += "/{crate}/{version}/download"
+
+        sparse_registry_configs[source] = dl
+
     mctx.report_progress("Initializing spokes")
 
     target_compatible_with = [_platform(triple) for triple in platform_triples]
+    use_home_cargo_credentials = bool(cargo_credentials)
 
     for package in packages:
         crate_name = package["name"]
@@ -509,21 +558,32 @@ def _generate_hub_and_spokes(
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
 
-        if _is_sparse_registry(source):
+        if source.startswith("sparse+"):
+            checksum = package["checksum"]
+            url = sparse_registry_configs[source].format(**{
+                "crate": crate_name,
+                "version": version,
+                "prefix": _sharded_path(crate_name),
+                "lowerprefix": _sharded_path(crate_name.lower()),
+                "sha256-checksum": checksum,
+            })
+
             if dry_run:
                 continue
 
-            name_version = (crate_name, version)
-
             crate_repository(
                 name = repo_name,
-                url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
-                strip_prefix = "%s-%s" % name_version,
-                checksum = package["checksum"],
+                url = url,
+                strip_prefix = "%s-%s" % (crate_name, version),
+                checksum = checksum,
+                # The repository will need to recompute these, but this lets us avoid serializing them.
+                use_home_cargo_credentials = use_home_cargo_credentials,
+                cargo_config = cargo_config,
+                source = source,
                 **kwargs
             )
         else:
-            repo_path, sha = _parse_git_url(source)
+            remote, commit = _parse_git_url(source)
             if dry_run:
                 continue
 
@@ -531,8 +591,9 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 init_submodules = True,
                 strip_prefix = package.get("strip_prefix"),
-                commit = sha,
-                remote = "https://github.com/%s.git" % repo_path,
+                commit = commit,
+                remote = remote,
+                verbose = debug,
                 **kwargs
             )
 
@@ -646,11 +707,19 @@ def _crate_impl(mctx):
                     toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
                 wasm_blob = toml2json
 
+            if cfg.use_home_cargo_credentials:
+                if not cfg.cargo_config:
+                    fail("Must provide cargo_config when using cargo credentials")
+
+                cargo_credentials = load_cargo_credentials(mctx, wasm_blob, cfg.cargo_config)
+            else:
+                cargo_credentials = {}
+
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cfg.cargo_lock, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -674,6 +743,8 @@ _from_cargo = tag_class(
     } | {
         "cargo_toml": attr.label(),
         "cargo_lock": attr.label(),
+        "cargo_config": attr.label(),
+        "use_home_cargo_credentials": attr.bool(),
         "platform_triples": attr.string_list(
             mandatory = True,
         ),

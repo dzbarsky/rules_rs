@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "generate_build_file", "common_attrs")
+load(":repository_utils.bzl", "common_attrs", "generate_build_file")
 load(":toml2json.bzl", "run_toml2json")
 
 # TODO(zbarsky): Fix this up once Fabian fixes the upstream
@@ -11,12 +11,13 @@ def _clone_or_update_repo(ctx, wasm_blob):
     if ctx.attr.strip_prefix:
         directory = root.get_child(".tmp_git_root")
 
-    # Return root Cargo.toml
     git_repo(ctx, directory)
+
+    # If the repo corresponds to a workspace of crates, return the root's Cargo.toml
     workspace_cargo_toml = None
 
     if ctx.attr.strip_prefix:
-        workspace_cargo_toml = run_toml2json(ctx, wasm_blob, "Cargo.toml")
+        workspace_cargo_toml = run_toml2json(ctx, wasm_blob, directory.get_child("Cargo.toml"))
 
         dest_link = "{}/{}".format(directory, ctx.attr.strip_prefix)
         if not ctx.path(dest_link).exists:
@@ -56,12 +57,13 @@ def _crate_git_repository_implementation(rctx):
     cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
 
     if workspace_cargo_toml:
-        crate_package = cargo_toml["package"]
-        workspace_package = workspace_cargo_toml["package"]
-        for field in _INHERITABLE_FIELDS:
-            value = crate_package.get(field)
-            if type(value) == "dict" and value.get("workspace") == True:
-                crate_package[field] = workspace_package.get(field)
+        workspace_package = workspace_cargo_toml.get("package")
+        if workspace_package:
+            crate_package = cargo_toml["package"]
+            for field in _INHERITABLE_FIELDS:
+                value = crate_package.get(field)
+                if type(value) == "dict" and value.get("workspace") == True:
+                    crate_package[field] = workspace_package.get(field)
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 
@@ -89,5 +91,6 @@ crate_git_repository = repository_rule(
             default = False,
             doc = "Whether to clone submodules recursively in the repository.",
         ),
+        "verbose": attr.bool(default = False),
     } | common_attrs,
 )
