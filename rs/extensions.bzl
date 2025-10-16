@@ -272,6 +272,24 @@ def _generate_hub_and_spokes(
     workspace_members = [p for p in cargo_lock["package"] if "source" not in p]
     packages = [p for p in cargo_lock["package"] if p.get("source")]
 
+    sparse_registries = set([package["source"].removeprefix("sparse+") for package in packages if package["source"].startswith("sparse+")])
+    download_tokens = {}
+    for source in sparse_registries:
+        # TODO(zbarsky): Need to plumb auth here
+        download_tokens[source] = mctx.download(
+            source + "config.json",
+            source.replace("/", "_") + "config.json",
+            block = False,
+        )
+
+    registry_configs = {}
+    for source, token in download_tokens.items():
+        result = token.wait()
+        if not result.success:
+            fail("Could not download")
+
+        registry_configs[source] = json.decode(mctx.read(source.replace("/", "_") + "config.json"))
+
     download_tokens = []
 
     versions_by_name = dict()
