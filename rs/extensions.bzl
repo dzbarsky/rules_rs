@@ -1,9 +1,9 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
-load("//rs/private:crate_repository.bzl", "crate_repository")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
+load("//rs/private:crate_repository.bzl", "crate_repository")
+load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
-load("//rs/private:resolver.bzl", "resolve")
 
 _DEFAULT_CRATE_ANNOTATION = struct(
     additive_build_file = None,
@@ -92,6 +92,9 @@ def _sharded_path(crate):
         return "3/%s/%s" % (crate[0], crate)
     return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
 
+def _is_sparse_registry(source):
+    return source == "registry+https://github.com/rust-lang/crates.io-index" or source.startswith("sparse+")
+
 def _date(ctx, label):
     return
     result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
@@ -146,6 +149,7 @@ def _generate_hub_and_spokes(
         if not result.success:
             fail("Could not download")
 
+        # TODO(zbarsky): We don't need these until crate download time.
         registry_configs[source] = json.decode(mctx.read(source.replace("/", "_") + "config.json"))
 
     download_tokens = []
@@ -167,8 +171,18 @@ def _generate_hub_and_spokes(
                 continue
 
             # TODO(zbarsky): dedupe fetches when multiple versions?
-            # TODO(zbarsky): Support custom registries
             url = "https://index.crates.io/" + _sharded_path(name)
+            token = mctx.download(url, key + ".jsonl", block = False)
+            download_tokens.append(token)
+        elif source.startswith("sparse+"):
+            key = name + "_" + version
+            fact = existing_facts.get(key)
+            if fact:
+                facts[key] = fact
+                continue
+
+            # TODO(zbarsky): dedupe fetches when multiple versions?
+            url = source.removeprefix("sparse+") + _sharded_path(name)
             token = mctx.download(url, key + ".jsonl", block = False)
             download_tokens.append(token)
         elif source.startswith("git+https://github.com/"):
@@ -192,6 +206,8 @@ def _generate_hub_and_spokes(
     # TODO(zbarsky): We should run `cargo metadata` while these are downloading, but for now just block to avoid
     # https://github.com/bazelbuild/bazel/issues/26995
     mctx.report_progress("Downloading metadata")
+
+    # TODO(zbarsky): We can start processing as soon as first tokens finish, we don't need to fully block.
     for token in download_tokens:
         result = token.wait()
         if not result.success:
@@ -225,7 +241,7 @@ def _generate_hub_and_spokes(
         version = package["version"]
         source = package["source"]
 
-        if source == "registry+https://github.com/rust-lang/crates.io-index":
+        if _is_sparse_registry(source):
             key = name + "_" + version
             fact = facts.get(key)
             if fact:
@@ -415,7 +431,7 @@ def _generate_hub_and_spokes(
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
-            if dep["source"] != "registry+https://github.com/rust-lang/crates.io-index":
+            if not _is_sparse_registry(dep["source"]):
                 continue
             name = dep["name"]
             workspace_deps.add(name)
@@ -458,7 +474,7 @@ def _generate_hub_and_spokes(
     for package in packages:
         crate_name = package["name"]
         version = package["version"]
-        checksum = package.get("checksum")
+        source = package["source"]
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
@@ -493,7 +509,7 @@ def _generate_hub_and_spokes(
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
 
-        if checksum:
+        if _is_sparse_registry(source):
             if dry_run:
                 continue
 
@@ -503,12 +519,11 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 url = "https://crates.io/api/v1/crates/%s/%s/download" % name_version,
                 strip_prefix = "%s-%s" % name_version,
-                checksum = checksum,
+                checksum = package["checksum"],
                 **kwargs
             )
         else:
-            repo_path, sha = _parse_git_url(package["source"])
-
+            repo_path, sha = _parse_git_url(source)
             if dry_run:
                 continue
 
@@ -518,7 +533,7 @@ def _generate_hub_and_spokes(
                 strip_prefix = package.get("strip_prefix"),
                 commit = sha,
                 remote = "https://github.com/%s.git" % repo_path,
-                **kwargs,
+                **kwargs
             )
 
     _date(mctx, "created repos")
