@@ -20,11 +20,7 @@ jobs:
       folders: |
         [
           ".",
-          "e2e/smoke"
-        ]
-      exclude: |
-        [
-          {"folder": ".", "bzlmodEnabled": false}
+          "test"
         ]
   pre-commit:
     runs-on: ubuntu-latest
