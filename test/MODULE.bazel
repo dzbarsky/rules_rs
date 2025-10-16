@@ -40,6 +40,7 @@ TESTS = [
     "build_script_runtime_env",
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
+    "git_crates",
     # Got count 45796 in 20 rounds
     "many_workspace_deps",
     "multiple_versions_for_dependency",
@@ -52,7 +53,7 @@ TESTS = [
         name = test,
         cargo_lock = "//:%s/Cargo.lock" % test,
         cargo_toml = "//:%s/Cargo.toml" % test,
-        debug = True,
+        #debug = True,
         platform_triples = [
             "aarch64-apple-darwin",
             "x86_64-unknown-linux-musl",

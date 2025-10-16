@@ -1,3 +1,4 @@
+load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository")
@@ -70,12 +71,19 @@ def _parse_git_url(url):
     # Strip query parameters
     base = base.split("?")[0]
 
-    repo_path = base.removeprefix("git+https://github.com/").removesuffix(".git")
+    remote = base.removeprefix("git+")
 
+    return remote, sha
+
+def _parse_github_url(url):
+    remote, sha = _parse_git_url(url)
+    print(remote, sha)
+    repo_path = remote.removeprefix("https://github.com/").removesuffix(".git")
+    print(repo_path, remote, sha)
     return repo_path, sha
 
-def _git_url_to_cargo_toml(url):
-    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_git_url(url)
+def _github_url_to_cargo_toml(url):
+    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_github_url(url)
 
 def _sharded_path(crate):
     # crates.io-index sharding rules (ASCII names)
@@ -171,17 +179,38 @@ def _generate_hub_and_spokes(
             url = source.removeprefix("sparse+") + _sharded_path(name.lower())
             token = mctx.download(url, key + ".jsonl", block = False)
             download_tokens.append(token)
-        elif source.startswith("git+https://github.com/"):
-            # TODO(zbarsky): Support other forges
+        elif source.startswith("git+"):
             key = source + "_" + name
             fact = existing_facts.get(key)
             if fact:
                 facts[key] = fact
                 continue
 
-            url = _git_url_to_cargo_toml(source)
-            token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
-            download_tokens.append(token)
+            if source.startswith("git+https://github.com/"):
+                url = _github_url_to_cargo_toml(source)
+                token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
+                download_tokens.append(token)
+            else:
+                # TODO(zbarsky): Ideally other forges could use the single-file fastpath...
+                remote, commit = _parse_git_url(source)
+                directory = mctx.path(source.replace("/", "_"))
+                clone_config = struct(
+                    delete = lambda _: 0,
+                    execute = mctx.execute,
+                    os = mctx.os,
+                    name = hub_name,
+                    path = mctx.path,
+                    report_progress = mctx.report_progress,
+                    attr = struct(
+                        shallow_since="",
+                        commit=commit,
+                        remote=remote,
+                        init_submodules = True,
+                        recursive_init_submodules = True,
+                        verbose = debug,
+                    ),
+                )
+                git_repo(clone_config, directory)
         else:
             fail("Unknown source " + source)
 
@@ -272,9 +301,15 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
-                strip_prefix = None
-                cargo_toml_json = run_toml2json(mctx, wasm_blob, "%s_%s.Cargo.toml" % (name, version))
+                if source.startswith("git+https://github.com/"):
+                    cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
+                else:
+                    # Non-github forges do a shallow clone into a child directory.
+                    cargo_toml_json_path = source.replace("/", "_") + "/Cargo.toml"
 
+                cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
+
+                strip_prefix = None
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
                     if name in workspace["members"]:
@@ -288,12 +323,16 @@ def _generate_hub_and_spokes(
 
                     if strip_prefix:
                         package["strip_prefix"] = strip_prefix
-                        download_path = strip_prefix + ".Cargo.toml"
-                        url = _git_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                        result = mctx.download(url, download_path)
-                        if not result.success:
-                            fail("Could not download")
-                        cargo_toml_json = run_toml2json(mctx, wasm_blob, download_path)
+                        if source.startswith("git+https://github.com/"):
+                            child_cargo_toml_json_path = strip_prefix + ".Cargo.toml"
+                            url = _github_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+                            result = mctx.download(url, child_cargo_toml_json_path)
+                            if not result.success:
+                                fail("Could not download")
+                        else:
+                            child_cargo_toml_json_path = cargo_toml_json_path.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+
+                        cargo_toml_json = run_toml2json(mctx, wasm_blob, child_cargo_toml_json_path)
 
                 dependencies = []
                 for dep, spec in cargo_toml_json.get("dependencies", {}).items():
@@ -418,8 +457,8 @@ def _generate_hub_and_spokes(
 
         for dep in package["dependencies"]:
             source = dep["source"]
-            if source != "registry+https://github.com/rust-lang/crates.io-index" and not source.startswith("sparse+"):
-                continue
+            #if source != "registry+https://github.com/rust-lang/crates.io-index" and not source.startswith("sparse+"):
+            #    continue
 
             name = dep["name"]
             workspace_deps.add(name)
@@ -531,7 +570,7 @@ def _generate_hub_and_spokes(
                 **kwargs
             )
         else:
-            repo_path, sha = _parse_git_url(source)
+            remote, commit = _parse_git_url(source)
             if dry_run:
                 continue
 
@@ -539,8 +578,9 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 init_submodules = True,
                 strip_prefix = package.get("strip_prefix"),
-                commit = sha,
-                remote = "https://github.com/%s.git" % repo_path,
+                commit = commit,
+                remote = remote,
+                verbose = debug,
                 **kwargs
             )
 

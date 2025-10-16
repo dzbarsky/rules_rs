@@ -1,0 +1,11 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+bitflags = { git = "https://github.com/bitflags/bitflags", rev = "de0ec28f9999bb8984fa92e19a2f53181098cc87" }
+serde_derive = { git = "ssh://git@github.com/serde-rs/serde.git", rev = "4e278703c62428b0a72e4ecec434a99c0e8576a3" }
+pm-bin = { git = "https://bitbucket.org/fm-elpac/pm-bin.git", rev = "0c313d913c3beabe4b722f85bdd932fbf9fdd896" }
