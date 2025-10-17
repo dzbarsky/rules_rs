@@ -54,7 +54,7 @@ def _crate_git_repository_implementation(rctx):
     else:
         rctx.delete(rctx.path(".git"))
 
-    cargo_toml = run_toml2json(rctx, wasm_blob, rctx.attr.workspace_cargo_toml)
+    cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
 
     if workspace_cargo_toml:
         workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")

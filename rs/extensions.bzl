@@ -318,7 +318,7 @@ crate.annotation(
      workspace_cargo_toml = "path/to/Cargo.toml",
 )
 
-""".format(name=name, version=version))
+""".format(name = name, version = version))
                     cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
                 else:
                     # Non-github forges do a shallow clone into a child directory.
@@ -589,13 +589,19 @@ crate.annotation(
             )
         else:
             remote, commit = _parse_git_url(source)
+
+            strip_prefix = package.get("strip_prefix")
+            workspace_cargo_toml = annotation.workspace_cargo_toml
+            if workspace_cargo_toml != "Cargo.toml":
+                strip_prefix = workspace_cargo_toml.removesuffix("Cargo.toml") + (strip_prefix or "")
+
             if dry_run:
                 continue
 
             crate_git_repository(
                 name = repo_name,
                 init_submodules = True,
-                strip_prefix = package.get("strip_prefix"),
+                strip_prefix = strip_prefix,
                 commit = commit,
                 remote = remote,
                 verbose = debug,
