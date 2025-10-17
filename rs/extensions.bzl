@@ -512,7 +512,13 @@ crate.annotation(
         token.wait()
         dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
 
-        if "{crate}" not in dl and "{version}" not in dl and "{sha256-checksum}" not in dl and "{prefix}" not in dl and "{lowerprefix}" not in dl:
+        if not (
+            "{crate}" in dl or
+            "{version}" in dl or
+            "{sha256-checksum}" in dl or
+            "{prefix}" in dl or
+            "{lowerprefix}" in dl
+        ):
             dl += "/{crate}/{version}/download"
 
         sparse_registry_configs[source] = dl
