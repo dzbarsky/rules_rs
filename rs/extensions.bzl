@@ -332,11 +332,18 @@ def _generate_hub_and_spokes(
                 fact = json.decode(fact)
             else:
                 if source.startswith("git+https://github.com/"):
-                    result = package["download_token"].wait()
-                    if not result.success:
-                        fail("""
+                    package["download_token"].wait()
+                    # This download may have failed! We check below.
+                    cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
+                else:
+                    # Non-github forges do a shallow clone into a child directory.
+                    annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
+                    cargo_toml_json_path = source.replace("/", "_") + "/" + annotation.workspace_cargo_toml
 
-ERROR: Could not download Cargo.toml for {name}@{version} from github repository, perhaps the repo root is not the Cargo workspace root?
+                if not mctx.path(cargo_toml_json_path).exists:
+                    fail("""
+
+ERROR: Could not download Cargo.toml for {name}@{version} from git repository, perhaps the repo root is not the Cargo workspace root?
 Please indicate the path to the workspace Cargo.toml (or the crate itself, if not part of a workspace) in MODULE.bazel, like so:
 
 crate.annotation(
@@ -345,11 +352,6 @@ crate.annotation(
 )
 
 """.format(name = name, version = version))
-                    cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
-                else:
-                    # Non-github forges do a shallow clone into a child directory.
-                    annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
-                    cargo_toml_json_path = source.replace("/", "_") + "/" + annotation.workspace_cargo_toml
 
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
                 workspace_cargo_toml_json = cargo_toml_json
@@ -374,9 +376,7 @@ crate.annotation(
                             url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
 
                             child_cargo_toml_json_path = strip_prefix + ".Cargo.toml"
-                            result = mctx.download(url, child_cargo_toml_json_path)
-                            if not result.success:
-                                fail("Could not download")
+                            mctx.download(url, child_cargo_toml_json_path)
                         else:
                             child_cargo_toml_json_path = cargo_toml_json_path.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
 
