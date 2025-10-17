@@ -107,6 +107,7 @@ def generate_build_file(rctx, cargo_toml):
 
     build_content = \
 """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(
     name = {name},
@@ -125,10 +126,7 @@ rust_crate(
     crate_root = {crate_root},
     edition = {edition},
     rustc_flags = {rustc_flags},
-    target_compatible_with = select({{
-        {target_compatible_with},
-        "//conditions:default": ["@platforms//:incompatible"],
-    }}),
+    target_compatible_with = RESOLVED_PLATFORMS,
     links = {links},
     build_script = {build_script},
     build_script_data = {build_script_data},
@@ -155,6 +153,7 @@ rust_crate(
 
     return build_content.format(
         name = repr(name),
+        hub_name = rctx.attr.hub_name,
         crate_name = repr(crate_name),
         version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
@@ -166,7 +165,6 @@ rust_crate(
         crate_root = repr(crate_root),
         edition = repr(edition),
         rustc_flags = repr(attr.rustc_flags or []),
-        target_compatible_with = ",\n        ".join(['"%s": []' % t for t in attr.target_compatible_with]),
         links = repr(links),
         build_script = repr(build_script),
         build_script_data = repr([str(t) for t in build_script_data]),
@@ -180,6 +178,7 @@ rust_crate(
     )
 
 common_attrs = {
+    "hub_name": attr.string(),
     "additive_build_file": attr.label(),
     "additive_build_file_content": attr.string(),
     "gen_build_script": attr.string(),
@@ -197,7 +196,6 @@ common_attrs = {
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
-    "target_compatible_with": attr.string_list(mandatory = True),
     "use_wasm": attr.bool(),
 } | {
     "strip_prefix": attr.string(

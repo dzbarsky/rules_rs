@@ -536,7 +536,6 @@ crate.annotation(
 
     mctx.report_progress("Initializing spokes")
 
-    target_compatible_with = [_platform(triple) for triple in platform_triples]
     use_home_cargo_credentials = bool(cargo_credentials)
 
     for package in packages:
@@ -549,6 +548,7 @@ crate.annotation(
         annotation = annotations.get(crate_name, _DEFAULT_CRATE_ANNOTATION)
 
         kwargs = dict(
+            hub_name = hub_name,
             additive_build_file = annotation.additive_build_file,
             additive_build_file_content = annotation.additive_build_file_content,
             gen_build_script = annotation.gen_build_script,
@@ -566,7 +566,6 @@ crate.annotation(
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
-            target_compatible_with = target_compatible_with,
             use_wasm = wasm_blob != None,
             patch_args = annotation.patch_args,
             patch_tool = annotation.patch_tool,
@@ -662,6 +661,16 @@ filegroup(
 )""" % ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
     )
 
+    defs_bzl_contents = \
+"""
+RESOLVED_PLATFORMS = select({{
+    {target_compatible_with},
+    "//conditions:default": ["@platforms//:incompatible"],
+}})
+""".format(
+        target_compatible_with = ",\n        ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
+    )
+
     _date(mctx, "done")
 
     if dry_run:
@@ -671,6 +680,7 @@ filegroup(
         name = hub_name,
         contents = {
             "BUILD.bazel": "\n".join(hub_contents),
+            "defs.bzl": defs_bzl_contents,
         },
     )
 
