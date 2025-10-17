@@ -422,6 +422,7 @@ crate.annotation(
 
         feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
         package["feature_resolutions"] = feature_resolutions
+        print(name, version)
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
 
     for package in packages:
@@ -431,6 +432,9 @@ crate.annotation(
             if idx != -1:
                 dep = maybe_fq_dep[:idx]
                 resolved_version = maybe_fq_dep[idx + 1:]
+                print("YY", dep, resolved_version)
+                if "#" in resolved_version:
+                    resolved_version = resolved_version[resolved_version.find("#")+1:]
                 _add_to_dict(deps_by_name, dep, resolved_version)
 
         for dep in package["feature_resolutions"].possible_deps:
@@ -693,6 +697,10 @@ def _compute_package_fq_deps(package, versions_by_name, strict = True):
         else:
             dep = maybe_fq_dep[:idx]
             resolved_version = maybe_fq_dep[idx + 1:]
+            print("ZZ", dep, resolved_version)
+            if "#" in resolved_version:
+                resolved_version = resolved_version[resolved_version.find("#")+1:]
+                print("ZZ", dep, resolved_version)
 
         possible_dep_fq_crate_by_name[dep] = _fq_crate(dep, resolved_version)
 
