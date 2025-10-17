@@ -348,7 +348,8 @@ crate.annotation(
                     cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
                 else:
                     # Non-github forges do a shallow clone into a child directory.
-                    cargo_toml_json_path = source.replace("/", "_") + "/Cargo.toml"
+                    annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
+                    cargo_toml_json_path = source.replace("/", "_") + "/" + annotation.workspace_cargo_toml
 
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
                 workspace_cargo_toml_json = cargo_toml_json
