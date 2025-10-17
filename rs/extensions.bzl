@@ -103,7 +103,7 @@ def _date(ctx, label):
     result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
     print(label, result.stdout)
 
-def _spec_to_dep_dict(dep, spec, is_build = False):
+def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
         dep = {"name": dep}
     else:
@@ -118,6 +118,16 @@ def _spec_to_dep_dict(dep, spec, is_build = False):
         dep["kind"] = "build"
 
     return dep
+
+def _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = False):
+    if spec == {"workspace": True}:
+        dep_key = "build-dependencies" if is_build else "dependencies"
+        return _spec_to_dep_dict_inner(
+            dep,
+            workspace_cargo_toml_json["workspace"][dep_key][dep],
+            is_build,
+        )
+    return _spec_to_dep_dict_inner(dep, spec, is_build)
 
 def _generate_hub_and_spokes(
         mctx,
@@ -341,6 +351,7 @@ crate.annotation(
                     cargo_toml_json_path = source.replace("/", "_") + "/Cargo.toml"
 
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
+                workspace_cargo_toml_json = cargo_toml_json
 
                 strip_prefix = None
                 if cargo_toml_json.get("package", {}).get("name") != name:
@@ -371,10 +382,10 @@ crate.annotation(
                         cargo_toml_json = run_toml2json(mctx, wasm_blob, child_cargo_toml_json_path)
 
                 dependencies = [
-                    _spec_to_dep_dict(dep, spec)
+                    _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json)
                     for dep, spec in cargo_toml_json.get("dependencies", {}).items()
                 ] + [
-                    _spec_to_dep_dict(dep, spec, is_build = True)
+                    _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = True)
                     for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
                 ]
 
