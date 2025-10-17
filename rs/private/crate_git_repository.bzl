@@ -57,7 +57,7 @@ def _crate_git_repository_implementation(rctx):
     cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
 
     if workspace_cargo_toml:
-        workspace_package = workspace_cargo_toml.get("package")
+        workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
         if workspace_package:
             crate_package = cargo_toml["package"]
             for field in _INHERITABLE_FIELDS:

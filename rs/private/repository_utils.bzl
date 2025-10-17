@@ -170,7 +170,7 @@ rust_crate(
         target_compatible_with = ",\n        ".join(['"%s": []' % t for t in attr.target_compatible_with]),
         links = repr(links),
         build_script = repr(build_script),
-        build_script_data = repr(build_script_data),
+        build_script_data = repr([str(t) for t in build_script_data]),
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_deps = ",\n        ".join(['"%s"' % d for d in sorted(build_deps)]),
         conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",

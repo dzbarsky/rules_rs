@@ -464,9 +464,8 @@ def _generate_hub_and_spokes(
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
-            source = dep["source"]
-            #if source != "registry+https://github.com/rust-lang/crates.io-index" and not source.startswith("sparse+"):
-            #    continue
+            if not dep["source"]:
+                continue
 
             name = dep["name"]
             workspace_deps.add(name)

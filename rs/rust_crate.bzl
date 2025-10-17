@@ -61,18 +61,18 @@ def rust_crate(
 
     if build_script:
         rust_deps(
-            name = "_bs_deps",
+            name = name + "_build_script_deps",
             deps = build_deps,
         )
 
         rust_deps(
-            name = "_bs_proc_macro_deps",
+            name = name + "_build_script_proc_macro_deps",
             deps = build_deps,
             proc_macros = True,
         )
 
         cargo_build_script(
-            name = "_bs",
+            name = name + "_build_script",
             aliases = aliases,
             compile_data = compile_data,
             crate_features = crate_features,
@@ -80,12 +80,12 @@ def rust_crate(
             crate_root = build_script,
             links = links,
             data = compile_data + build_script_data,
-            deps = [":_bs_deps"],
+            deps = [name + "_build_script_deps"],
             link_deps = deps,
             build_script_env = build_script_env,
             build_script_env_files = ["cargo_toml_env_vars.env"],
             toolchains = build_script_toolchains,
-            proc_macro_deps = [":_bs_proc_macro_deps"],
+            proc_macro_deps = [name + "_build_script_proc_macro_deps"],
             edition = edition,
             pkg_name = crate_name,
             rustc_env_files = ["cargo_toml_env_vars.env"],
@@ -96,33 +96,31 @@ def rust_crate(
             version = version,
         )
 
-        maybe_build_script = [":_bs"]
+        maybe_build_script = [name + "_build_script"]
     else:
         maybe_build_script = []
 
-    rule = rust_proc_macro if is_proc_macro else rust_library
-
     rust_deps(
-        name = "deps",
+        name = name + "_deps",
         deps = deps,
     )
 
     rust_deps(
-        name = "proc_macro_deps",
+        name = name + "_proc_macro_deps",
         deps = deps,
         proc_macros = True,
     )
 
-    rule(
+    kwargs = dict(
         name = name,
         crate_name = crate_name,
         version = version,
         srcs = srcs,
         compile_data = compile_data,
         aliases = aliases,
-        deps = [":deps"] + maybe_build_script,
+        deps = [name + "_deps"] + maybe_build_script,
         data = data,
-        proc_macro_deps = [":proc_macro_deps"],
+        proc_macro_deps = [name + "_proc_macro_deps"],
         crate_features = crate_features,
         crate_root = crate_root,
         edition = edition,
@@ -132,3 +130,8 @@ def rust_crate(
         target_compatible_with = target_compatible_with,
         visibility = ["//visibility:public"],
     )
+
+    if is_proc_macro:
+        rust_proc_macro(**kwargs)
+    else:
+        rust_library(**kwargs)
