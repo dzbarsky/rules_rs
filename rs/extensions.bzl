@@ -103,6 +103,22 @@ def _date(ctx, label):
     result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
     print(label, result.stdout)
 
+def _spec_to_dep_dict(dep, spec, is_build = False):
+    if type(spec) == "string":
+        dep = {"name": dep}
+    else:
+        dep = {
+            "name": dep,
+            "optional": spec.get("optional", False),
+            "default_features": spec.get("default_features", spec.get("default-features", True)),
+            "features": spec.get("features", []),
+        }
+
+    if is_build:
+        dep["kind"] = "build"
+
+    return dep
+
 def _generate_hub_and_spokes(
         mctx,
         wasm_blob,
@@ -354,34 +370,13 @@ crate.annotation(
 
                         cargo_toml_json = run_toml2json(mctx, wasm_blob, child_cargo_toml_json_path)
 
-                dependencies = []
-                for dep, spec in cargo_toml_json.get("dependencies", {}).items():
-                    if type(spec) == "string":
-                        dependencies.append({
-                            "name": dep,
-                        })
-                    else:
-                        dependencies.append({
-                            "name": dep,
-                            "optional": spec.get("optional", False),
-                            "default_features": spec.get("default_features", True),
-                            "features": spec.get("features", []),
-                        })
-
-                for dep, spec in cargo_toml_json.get("build-dependencies", {}).items():
-                    if type(spec) == "string":
-                        dependencies.append({
-                            "name": dep,
-                            "kind": "build",
-                        })
-                    else:
-                        dependencies.append({
-                            "name": dep,
-                            "kind": "build",
-                            "optional": spec.get("optional", False),
-                            "default_features": spec.get("default_features", True),
-                            "features": spec.get("features", []),
-                        })
+                dependencies = [
+                    _spec_to_dep_dict(dep, spec)
+                    for dep, spec in cargo_toml_json.get("dependencies", {}).items()
+                ] + [
+                    _spec_to_dep_dict(dep, spec, is_build = True)
+                    for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
+                ]
 
                 if not dependencies and debug:
                     print(name, version, package["source"])
