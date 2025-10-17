@@ -99,14 +99,14 @@ def generate_build_file(rctx, cargo_toml):
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
-    lib_path = (lib.get("path") or "src/lib.rs").removeprefix("./")
+    crate_root = (lib.get("path") or "src/lib.rs").removeprefix("./")
 
     edition = package.get("edition", "2015")
     crate_name = lib.get("name")
     links = package.get("links")
 
-    build_content = """
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+    build_content = \
+"""load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 
 rust_crate(
     name = {name},
@@ -122,7 +122,7 @@ rust_crate(
         {data}
     ],
     crate_features = {crate_features}{conditional_crate_features},
-    crate_root = {lib_path},
+    crate_root = {crate_root},
     edition = {edition},
     rustc_flags = {rustc_flags},
     target_compatible_with = select({{
@@ -139,7 +139,6 @@ rust_crate(
     build_script_toolchains = {build_script_toolchains},
     is_proc_macro = {is_proc_macro},
 )
-
 """
 
     if attr.additive_build_file:
@@ -164,7 +163,7 @@ rust_crate(
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
         crate_features = repr(sorted(crate_features)),
         conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
-        lib_path = repr(lib_path),
+        crate_root = repr(crate_root),
         edition = repr(edition),
         rustc_flags = repr(attr.rustc_flags or []),
         target_compatible_with = ",\n        ".join(['"%s": []' % t for t in attr.target_compatible_with]),

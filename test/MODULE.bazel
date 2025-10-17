@@ -83,3 +83,8 @@ crate.annotation(
     crate = "bitflags",
     repositories = ["build_script_env_select"],
 )
+
+crate.annotation(
+     crate = "tokenizers",
+     workspace_cargo_toml = "tokenizers/Cargo.toml",
+)

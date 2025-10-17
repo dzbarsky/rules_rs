@@ -23,6 +23,7 @@ _DEFAULT_CRATE_ANNOTATION = struct(
     patch_args = [],
     patch_tool = None,
     patches = [],
+    workspace_cargo_toml = "Cargo.toml",
 )
 
 def _spoke_repo(hub_name, name, version):
@@ -81,8 +82,8 @@ def _parse_github_url(url):
     repo_path = remote.removeprefix("https://github.com/").removesuffix(".git")
     return repo_path, sha
 
-def _github_url_to_cargo_toml(url):
-    return "https://raw.githubusercontent.com/%s/%s/Cargo.toml" % _parse_github_url(url)
+def _github_source_to_raw_content_base_url(url):
+    return "https://raw.githubusercontent.com/%s/%s/" % _parse_github_url(url)
 
 def _sharded_path(crate):
     # crates.io-index sharding rules (ASCII names)
@@ -128,9 +129,24 @@ def _generate_hub_and_spokes(
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
+
+    # TODO(zbarsky): We should run `cargo metadata` while the deps are downloading, but for now just kick it off early to avoid
+    # https://github.com/bazelbuild/bazel/issues/26995
+    mctx.report_progress("Reading workspace metadata")
+    cargo = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
+    result = mctx.execute(
+        [cargo, "metadata", "--no-deps", "--format-version=1", "--quiet"],
+        working_directory = str(mctx.path(cargo_lock_path).dirname),
+    )
+    if result.return_code != 0:
+        fail(result.stdout + "\n" + result.stderr)
+    cargo_metadata = json.decode(result.stdout)
+
+    _date(mctx, "parsed cargo metadata")
+
     mctx.watch(cargo_lock_path)
     cargo_lock = run_toml2json(mctx, wasm_blob, cargo_lock_path)
-    _date(mctx, "parsed")
+    _date(mctx, "parsed cargo.lock")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
@@ -160,8 +176,6 @@ def _generate_hub_and_spokes(
             block = False,
         )
 
-    download_tokens = []
-
     versions_by_name = dict()
     for package in packages:
         name = package["name"]
@@ -180,13 +194,12 @@ def _generate_hub_and_spokes(
 
             # TODO(zbarsky): dedupe fetches when multiple versions?
             url = source.removeprefix("sparse+") + _sharded_path(name.lower())
-            token = mctx.download(
+            package["download_token"] = mctx.download(
                 url,
                 key + ".jsonl",
                 headers = registry_auth_headers(cargo_credentials, source),
                 block = False,
             )
-            download_tokens.append(token)
         elif source.startswith("git+"):
             key = source + "_" + name
             fact = existing_facts.get(key)
@@ -195,9 +208,14 @@ def _generate_hub_and_spokes(
                 continue
 
             if source.startswith("git+https://github.com/"):
-                url = _github_url_to_cargo_toml(source)
-                token = mctx.download(url, "%s_%s.Cargo.toml" % (name, version), block = False)
-                download_tokens.append(token)
+                annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
+                url = _github_source_to_raw_content_base_url(source) + annotation.workspace_cargo_toml
+                package["download_token"] = mctx.download(
+                    url,
+                    "%s_%s.Cargo.toml" % (name, version),
+                    allow_fail = True,
+                    block = False,
+                )
             else:
                 # TODO(zbarsky): Ideally other forges could use the single-file fastpath...
                 remote, commit = _parse_git_url(source)
@@ -224,32 +242,9 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "kicked off downloads")
 
-    # TODO(zbarsky): we should run downloads across all hubs in parallel instead of blocking here.
-
-    # TODO(zbarsky): We should run `cargo metadata` while these are downloading, but for now just block to avoid
-    # https://github.com/bazelbuild/bazel/issues/26995
-    mctx.report_progress("Downloading metadata")
-
-    # TODO(zbarsky): We can start processing as soon as first tokens finish, we don't need to fully block.
-    for token in download_tokens:
-        result = token.wait()
-        if not result.success:
-            fail("Could not download")
-
-    cargo = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
-    result = mctx.execute(
-        [cargo, "metadata", "--no-deps", "--format-version=1", "--quiet"],
-        working_directory = str(mctx.path(cargo_lock_path).dirname),
-    )
-    if result.return_code != 0:
-        fail(result.stdout + "\n" + result.stderr)
-    cargo_metadata = json.decode(result.stdout)
-
-    _date(mctx, "parsed cargo metadata")
+    # TODO(zbarsky): we should kick off downloads across all hubs in parallel instead of blocking other hubs on resolving this one.
 
     platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
-
-    _date(mctx, "got tokens")
 
     mctx.report_progress("Computing dependencies and features")
 
@@ -270,6 +265,7 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
+                package["download_token"].wait()
                 metadatas = mctx.read(key + ".jsonl").strip().split("\n")
                 for metadata in metadatas:
                     metadata = json.decode(metadata)
@@ -310,6 +306,19 @@ def _generate_hub_and_spokes(
                 fact = json.decode(fact)
             else:
                 if source.startswith("git+https://github.com/"):
+                    result = package["download_token"].wait()
+                    if not result.success:
+                        fail("""
+
+ERROR: Could not download Cargo.toml for {name}@{version} from github repository, perhaps the repo root is not the Cargo workspace root?
+Please indicate the path to the workspace Cargo.toml (or the crate itself, if not part of a workspace) in MODULE.bazel, like so:
+
+crate.annotation(
+     crate = "{name}",
+     workspace_cargo_toml = "path/to/Cargo.toml",
+)
+
+""".format(name=name, version=version))
                     cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
                 else:
                     # Non-github forges do a shallow clone into a child directory.
@@ -332,8 +341,11 @@ def _generate_hub_and_spokes(
                     if strip_prefix:
                         package["strip_prefix"] = strip_prefix
                         if source.startswith("git+https://github.com/"):
+                            annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
+                            url = _github_source_to_raw_content_base_url(source) + annotation.workspace_cargo_toml
+                            url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+
                             child_cargo_toml_json_path = strip_prefix + ".Cargo.toml"
-                            url = _github_url_to_cargo_toml(source).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
                             result = mctx.download(url, child_cargo_toml_json_path)
                             if not result.success:
                                 fail("Could not download")
@@ -502,11 +514,7 @@ def _generate_hub_and_spokes(
     resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
 
     for source, token in sparse_registry_configs.items():
-        result = token.wait()
-        if not result.success:
-            fail("Could not download")
-
-        # TODO(zbarsky): auth token?
+        token.wait()
         dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
 
         if "{crate}" not in dl and "{version}" not in dl and "{sha256-checksum}" not in dl and "{prefix}" not in dl and "{lowerprefix}" not in dl:
@@ -526,9 +534,7 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
-        annotation = annotations.get(crate_name)
-        if not annotation:
-            annotation = _DEFAULT_CRATE_ANNOTATION
+        annotation = annotations.get(crate_name, _DEFAULT_CRATE_ANNOTATION)
 
         kwargs = dict(
             additive_build_file = annotation.additive_build_file,
@@ -593,6 +599,7 @@ def _generate_hub_and_spokes(
                 commit = commit,
                 remote = remote,
                 verbose = debug,
+                workspace_cargo_toml = annotation.workspace_cargo_toml,
                 **kwargs
             )
 
@@ -889,6 +896,10 @@ _annotation = tag_class(
         # "shallow_since": attr.string(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
+        "workspace_cargo_toml": attr.string(
+            doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",
+            default = "Cargo.toml",
+        ),
     },
 )
 

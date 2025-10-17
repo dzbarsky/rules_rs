@@ -17,7 +17,7 @@ def _clone_or_update_repo(ctx, wasm_blob):
     workspace_cargo_toml = None
 
     if ctx.attr.strip_prefix:
-        workspace_cargo_toml = run_toml2json(ctx, wasm_blob, directory.get_child("Cargo.toml"))
+        workspace_cargo_toml = run_toml2json(ctx, wasm_blob, directory.get_child(ctx.attr.workspace_cargo_toml))
 
         dest_link = "{}/{}".format(directory, ctx.attr.strip_prefix)
         if not ctx.path(dest_link).exists:
@@ -54,7 +54,7 @@ def _crate_git_repository_implementation(rctx):
     else:
         rctx.delete(rctx.path(".git"))
 
-    cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
+    cargo_toml = run_toml2json(rctx, wasm_blob, rctx.attr.workspace_cargo_toml)
 
     if workspace_cargo_toml:
         workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
@@ -92,5 +92,6 @@ crate_git_repository = repository_rule(
             doc = "Whether to clone submodules recursively in the repository.",
         ),
         "verbose": attr.bool(default = False),
+        "workspace_cargo_toml": attr.string(default = "Cargo.toml"),
     } | common_attrs,
 )
