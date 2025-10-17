@@ -477,8 +477,14 @@ crate.annotation(
 
     workspace_deps = set()
 
+    # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
+    watch_manifests = cargo_lock_path.repo_name == ""
+
     # Set initial set of features from Cargo.tomls
     for package in cargo_metadata["packages"]:
+        if watch_manifests:
+            mctx.watch(package["manifest_path"])
+
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
