@@ -122,6 +122,8 @@ def _spec_to_dep_dict_inner(dep, spec, is_build = False):
 def _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = False):
     if spec == {"workspace": True}:
         dep_key = "build-dependencies" if is_build else "dependencies"
+        if "workspace" not in workspace_cargo_toml_json:
+            print(workspace_cargo_toml_json)
         return _spec_to_dep_dict_inner(
             dep,
             workspace_cargo_toml_json["workspace"][dep_key][dep],
