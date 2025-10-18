@@ -46,6 +46,9 @@ def _crate_git_repository_implementation(rctx):
     else:
         wasm_blob = None
 
+    if rctx.attr.name == "piiclient":
+        print("pii", "strip", rctx.attr.strip_prefix, "root", rctx.attr.workspace_cargo_toml)
+
     workspace_cargo_toml = _clone_or_update_repo(rctx, wasm_blob)
     patch(rctx)
 

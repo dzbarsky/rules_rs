@@ -130,6 +130,8 @@ ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a 
 
 """.format(name = annotation.crate))
 
+        if "workspace" not in workspace_cargo_toml_json:
+            print(workspace_cargo_toml_json)
         inherited = _spec_to_dep_dict_inner(
             dep,
             workspace["dependencies"][dep],
