@@ -675,6 +675,13 @@ filegroup(
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
 
+def aliases(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return {{}}
+
+    return dep_data["aliases"]
+
 def all_crate_deps(
         normal = False,
         #normal_dev = False,
@@ -711,6 +718,7 @@ RESOLVED_PLATFORMS = select({{
 
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
+        aliases = {}
         deps = []
         build_deps = []
 
@@ -718,6 +726,8 @@ RESOLVED_PLATFORMS = select({{
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 bazel_target = "//" + dep["path"].removeprefix(repo_root)
+                # TODO(zbarsky): check if we actually need this?
+                aliases[bazel_target] = dep["name"]
 
             if dep["kind"] == "build":
                 build_deps.append(bazel_target)
@@ -726,6 +736,9 @@ RESOLVED_PLATFORMS = select({{
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
+        "aliases": {{
+            {aliases}
+        }},
         "deps": [
             {deps}
         ],
@@ -734,6 +747,7 @@ RESOLVED_PLATFORMS = select({{
         ],
     }},""".format(
             bazel_package = repr(package["manifest_path"].removeprefix(repo_root).removesuffix("/Cargo.toml")),
+            aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
             deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
             build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
         ))
