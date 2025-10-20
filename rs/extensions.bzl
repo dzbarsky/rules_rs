@@ -333,6 +333,7 @@ def _generate_hub_and_spokes(
             else:
                 if source.startswith("git+https://github.com/"):
                     package["download_token"].wait()
+
                     # This download may have failed! We check below.
                     cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
                 else:
@@ -499,7 +500,9 @@ crate.annotation(
             if dep["uses_default_features"]:
                 features.append("default")
 
-            feature_resolutions = feature_resolutions_by_fq_crate[fq_deps[name]]
+            dep_fq = fq_deps[name]
+            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+            feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
             match = cfg_match_cache.get(target)
@@ -669,16 +672,73 @@ filegroup(
     )
 
     defs_bzl_contents = \
-"""
+        """load(":data.bzl", "DEP_DATA")
+load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+def all_crate_deps(
+        normal = False,
+        #normal_dev = False,
+        proc_macro = False,
+        #proc_macro_dev = False,
+        build = False,
+        build_proc_macro = False,
+        package_name = None):
+
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return []
+
+    return _all_crate_deps(
+        dep_data,
+        normal = normal,
+        proc_macro = proc_macro,
+        build = build,
+        build_proc_macro = build_proc_macro,
+    )
+
 RESOLVED_PLATFORMS = select({{
     {target_compatible_with},
     "//conditions:default": ["@platforms//:incompatible"],
 }})
 """.format(
-        target_compatible_with = ",\n        ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
-    )
+            target_compatible_with = ",\n        ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
+        )
 
     _date(mctx, "done")
+
+    # TODO(zbarsky): Is this correct for non-main repos? Will anyone care?
+    repo_root = str(mctx.path(Label("@@//:all"))).removesuffix("all")
+
+    workspace_dep_stanzas = []
+    for package in cargo_metadata["packages"]:
+        deps = []
+        build_deps = []
+
+        for dep in package["dependencies"]:
+            bazel_target = dep.get("bazel_target")
+            if not bazel_target:
+                bazel_target = "//" + dep["path"].removeprefix(repo_root)
+
+            if dep["kind"] == "build":
+                build_deps.append(bazel_target)
+            else:
+                deps.append(bazel_target)
+
+        workspace_dep_stanzas.append("""
+    {bazel_package}: {{
+        "deps": [
+            {deps}
+        ],
+        "build_deps": [
+            {build_deps}
+        ],
+    }},""".format(
+            bazel_package = repr(package["manifest_path"].removeprefix(repo_root).removesuffix("/Cargo.toml")),
+            deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
+            build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
+        ))
+
+    data_bzl_contents = "DEP_DATA = {" + "\n".join(workspace_dep_stanzas) + "\n}"
 
     if dry_run:
         return
@@ -688,6 +748,7 @@ RESOLVED_PLATFORMS = select({{
         contents = {
             "BUILD.bazel": "\n".join(hub_contents),
             "defs.bzl": defs_bzl_contents,
+            "data.bzl": data_bzl_contents,
         },
     )
 
