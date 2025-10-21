@@ -121,12 +121,16 @@ def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     return dep
 
 def _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = False):
-    if spec == {"workspace": True}:
-        return _spec_to_dep_dict_inner(
+    if type(spec) == "dict" and spec.get("workspace") == True:
+        inherited = _spec_to_dep_dict_inner(
             dep,
             workspace_cargo_toml_json["workspace"]["dependencies"][dep],
             is_build,
         )
+        extra_features = spec.get("features")
+        if extra_features:
+            inherited["features"] = sorted(set(extra_features + inherited.get("features", [])))
+        return inherited
     return _spec_to_dep_dict_inner(dep, spec, is_build)
 
 def _generate_hub_and_spokes(
@@ -174,7 +178,7 @@ def _generate_hub_and_spokes(
     cargo_lock = run_toml2json(mctx, wasm_blob, cargo_lock_path)
     _date(mctx, "parsed cargo.lock")
 
-    existing_facts = getattr(mctx, "facts", {}) or {}
+    existing_facts = {} # getattr(mctx, "facts", {}) or {}
     facts = {}
 
     # Ignore workspace members
