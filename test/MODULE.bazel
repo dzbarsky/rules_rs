@@ -46,7 +46,7 @@ TESTS = [
     "multiple_versions_for_dependency",
     "optional_build_deps",
     "platform_dep_features",
-    "uv-fs",
+    "uv",
 ]
 
 [
@@ -89,3 +89,12 @@ crate.annotation(
      crate = "tokenizers",
      workspace_cargo_toml = "tokenizers/Cargo.toml",
 )
+
+# Workaround not parsing `members = ["crates/*"]` yet.
+[
+    crate.annotation(crate = member, strip_prefix = "crates/" + member)
+    for member in [
+        "uv",
+        "uv-performance-memory-allocator",
+    ]
+]

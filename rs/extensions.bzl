@@ -23,6 +23,7 @@ _DEFAULT_CRATE_ANNOTATION = struct(
     patch_args = [],
     patch_tool = None,
     patches = [],
+    strip_prefix = None,
     workspace_cargo_toml = "Cargo.toml",
 )
 
@@ -121,10 +122,9 @@ def _spec_to_dep_dict_inner(dep, spec, is_build = False):
 
 def _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = False):
     if spec == {"workspace": True}:
-        dep_key = "build-dependencies" if is_build else "dependencies"
         return _spec_to_dep_dict_inner(
             dep,
-            workspace_cargo_toml_json["workspace"][dep_key][dep],
+            workspace_cargo_toml_json["workspace"]["dependencies"][dep],
             is_build,
         )
     return _spec_to_dep_dict_inner(dep, spec, is_build)
@@ -331,6 +331,7 @@ def _generate_hub_and_spokes(
             if fact:
                 fact = json.decode(fact)
             else:
+                annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
                 if source.startswith("git+https://github.com/"):
                     package["download_token"].wait()
 
@@ -338,7 +339,6 @@ def _generate_hub_and_spokes(
                     cargo_toml_json_path = "%s_%s.Cargo.toml" % (name, version)
                 else:
                     # Non-github forges do a shallow clone into a child directory.
-                    annotation = annotations.get(name, _DEFAULT_CRATE_ANNOTATION)
                     cargo_toml_json_path = source.replace("/", "_") + "/" + annotation.workspace_cargo_toml
 
                 if not mctx.path(cargo_toml_json_path).exists:
@@ -357,17 +357,18 @@ crate.annotation(
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
                 workspace_cargo_toml_json = cargo_toml_json
 
-                if False and annotations.get(name, _DEFAULT_CRATE_ANNOTATION).workspace_cargo_toml != "Cargo.toml" and "workspace" not in cargo_toml_json:
+                if False and annotation.workspace_cargo_toml != "Cargo.toml" and "workspace" not in cargo_toml_json:
                     fail("""
 
 ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
 
 """.format(name = name))
 
-                strip_prefix = None
+                strip_prefix = annotation.strip_prefix
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
-                    if name in workspace["members"]:
+
+                    if strip_prefix == None and name in workspace["members"]:
                         strip_prefix = name
 
                     if strip_prefix == None:
@@ -382,6 +383,7 @@ ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a 
                             if type(dep) == "dict" and dep.get("package") == name:
                                 strip_prefix = dep["path"]
                                 break
+
                     # TODO(zbarsky): any more cases to handle here?
 
                     if strip_prefix:
@@ -747,6 +749,7 @@ RESOLVED_PLATFORMS = select({{
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 bazel_target = "//" + dep["path"].removeprefix(repo_root)
+
                 # TODO(zbarsky): check if we actually need this?
                 aliases[bazel_target] = dep["name"]
 
@@ -1027,6 +1030,7 @@ _annotation = tag_class(
         # "shallow_since": attr.string(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
+        "strip_prefix": attr.string(),
         "workspace_cargo_toml": attr.string(
             doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",
             default = "Cargo.toml",
