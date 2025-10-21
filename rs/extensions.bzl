@@ -120,11 +120,19 @@ def _spec_to_dep_dict_inner(dep, spec, is_build = False):
 
     return dep
 
-def _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = False):
+def _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json, is_build = False):
     if type(spec) == "dict" and spec.get("workspace") == True:
+        workspace = workspace_cargo_toml_json.get("workspace")
+        if not workspace and annotation.workspace_cargo_toml != "Cargo.toml":
+            fail("""
+
+ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
+
+""".format(name = annotation.crate))
+
         inherited = _spec_to_dep_dict_inner(
             dep,
-            workspace_cargo_toml_json["workspace"]["dependencies"][dep],
+            workspace["dependencies"][dep],
             is_build,
         )
         extra_features = spec.get("features")
@@ -178,7 +186,7 @@ def _generate_hub_and_spokes(
     cargo_lock = run_toml2json(mctx, wasm_blob, cargo_lock_path)
     _date(mctx, "parsed cargo.lock")
 
-    existing_facts = {} # getattr(mctx, "facts", {}) or {}
+    existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
 
     # Ignore workspace members
@@ -361,13 +369,6 @@ crate.annotation(
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
                 workspace_cargo_toml_json = cargo_toml_json
 
-                if False and annotation.workspace_cargo_toml != "Cargo.toml" and "workspace" not in cargo_toml_json:
-                    fail("""
-
-ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
-
-""".format(name = name))
-
                 strip_prefix = annotation.strip_prefix
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
@@ -405,16 +406,16 @@ ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a 
                         cargo_toml_json = run_toml2json(mctx, wasm_blob, child_cargo_toml_json_path)
 
                 dependencies = [
-                    _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json)
+                    _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json)
                     for dep, spec in cargo_toml_json.get("dependencies", {}).items()
                 ] + [
-                    _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = True)
+                    _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json, is_build = True)
                     for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
                 ]
 
                 for target, value in cargo_toml_json.get("target", {}).items():
                     for dep, spec in value["dependencies"].items():
-                        converted = _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json)
+                        converted = _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json)
                         converted["target"] = target
                         dependencies.append(converted)
 
