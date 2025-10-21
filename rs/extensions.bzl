@@ -357,6 +357,13 @@ crate.annotation(
                 cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_json_path)
                 workspace_cargo_toml_json = cargo_toml_json
 
+                if annotations.get(name, _DEFAULT_CRATE_ANNOTATION).workspace_cargo_toml != "Cargo.toml" and "workspace" not in cargo_toml_json:
+                    fail("""
+
+ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
+
+""".format(name = name))
+
                 strip_prefix = None
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
