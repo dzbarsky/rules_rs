@@ -53,6 +53,8 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
             to_remove = None
             match = dep["target"]
 
+            added_dep = False
+
             for triple in match:
                 if optional:
                     features_for_triple = features_enabled[triple]
@@ -60,8 +62,9 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
                         continue
 
                 triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
-                if package_changed or bazel_target not in triple_deps:
+                if bazel_target not in triple_deps:
                     package_changed = True
+                    added_dep = True
                     triple_deps.add(bazel_target)
 
                 if has_alias:
@@ -78,6 +81,9 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
                 if not to_remove:
                     to_remove = set()
                 to_remove.add(triple)
+
+            if added_dep:
+                new_dirty_package_indices.add(dep_feature_resolutions.package_index)
 
             if to_remove:
                 if len(to_remove) == len(match):
@@ -146,9 +152,8 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 50
 
-def resolve(mctx, packages, feature_resolutions_by_fq_crate, debug):
+def resolve(mctx, packages, dirty_package_indices, feature_resolutions_by_fq_crate, debug):
     # Do some rounds of mutual resolution; bail when no more changes
-    dirty_package_indices = range(len(packages))
     for i in range(_MAX_ROUNDS):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 

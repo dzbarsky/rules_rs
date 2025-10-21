@@ -321,6 +321,8 @@ def _generate_hub_and_spokes(
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
     watch_manifests = cargo_lock_path.repo_name == ""
 
+    dirty_package_indices = set()
+
     # Set initial set of features from Cargo.tomls
     for package in cargo_metadata["packages"]:
         if watch_manifests:
@@ -341,6 +343,7 @@ def _generate_hub_and_spokes(
             dep_fq = fq_deps[name]
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+            dirty_package_indices.add(feature_resolutions.package_index)
 
             versions = workspace_dep_versions_by_name.get(name)
             if not versions:
@@ -365,13 +368,16 @@ def _generate_hub_and_spokes(
     for crate, annotation in annotations.items():
         if annotation.crate_features:
             for version in versions_by_name.get(crate, []):
-                features_enabled = feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled
+                feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate, version)]
+                dirty_package_indices.add(feature_resolutions.package_index)
+
+                features_enabled = feature_resolutions.features_enabled
                 for triple in platform_triples:
                     features_enabled[triple].update(annotation.crate_features)
 
     _date(mctx, "set up initial deps!")
 
-    resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
+    resolve(mctx, packages, sorted(dirty_package_indices), feature_resolutions_by_fq_crate, debug)
 
     # Validate that we aren't trying to enable any `dep:foo` features that were not even in the lockfile.
     for package in packages:
