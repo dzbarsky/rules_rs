@@ -369,12 +369,20 @@ ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a 
                     workspace = cargo_toml_json["workspace"]
                     if name in workspace["members"]:
                         strip_prefix = name
-                    else:
-                        # TODO(zbarsky): more cases to handle here?
+
+                    if strip_prefix == None:
+                        # Handle `uv-python = { path = "crates/uv-python" }` when `members` includes wildcard.
+                        dep = workspace["dependencies"].get(name)
+                        if type(dep) == "dict":
+                            strip_prefix = dep["path"]
+
+                    if strip_prefix == None:
+                        # Handle `wirefilter = { path = "engine", package = "wirefilter-engine" }` when crate is aliased internally.
                         for dep in workspace["dependencies"].values():
                             if type(dep) == "dict" and dep.get("package") == name:
                                 strip_prefix = dep["path"]
                                 break
+                    # TODO(zbarsky): any more cases to handle here?
 
                     if strip_prefix:
                         package["strip_prefix"] = strip_prefix
@@ -397,6 +405,12 @@ ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a 
                     _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json, is_build = True)
                     for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
                 ]
+
+                for target, value in cargo_toml_json.get("target", {}).items():
+                    for dep, spec in value["dependencies"].items():
+                        converted = _spec_to_dep_dict(dep, spec, workspace_cargo_toml_json)
+                        converted["target"] = target
+                        dependencies.append(converted)
 
                 if not dependencies and debug:
                     print(name, version, package["source"])

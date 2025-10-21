@@ -46,6 +46,7 @@ TESTS = [
     "multiple_versions_for_dependency",
     "optional_build_deps",
     "platform_dep_features",
+    "uv-fs",
 ]
 
 [
