@@ -126,7 +126,8 @@ def _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json, is_build
         if not workspace and annotation.workspace_cargo_toml != "Cargo.toml":
             fail("""
 
-ERROR: `crate.annotation` for {name} has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
+ERROR: `crate.annotation` for `{name}` has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
+Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
 
 """.format(name = annotation.crate))
 
@@ -373,16 +374,16 @@ crate.annotation(
                 if cargo_toml_json.get("package", {}).get("name") != name:
                     workspace = cargo_toml_json["workspace"]
 
-                    if strip_prefix == None and name in workspace["members"]:
+                    if not strip_prefix and name in workspace["members"]:
                         strip_prefix = name
 
-                    if strip_prefix == None:
+                    if not strip_prefix:
                         # Handle `uv-python = { path = "crates/uv-python" }` when `members` includes wildcard.
                         dep = workspace["dependencies"].get(name)
                         if type(dep) == "dict":
                             strip_prefix = dep["path"]
 
-                    if strip_prefix == None:
+                    if not strip_prefix:
                         # Handle `wirefilter = { path = "engine", package = "wirefilter-engine" }` when crate is aliased internally.
                         for dep in workspace["dependencies"].values():
                             if type(dep) == "dict" and dep.get("package") == name:
