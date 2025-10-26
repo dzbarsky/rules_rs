@@ -84,15 +84,17 @@ crate.annotation(
     crate = "bitflags",
     repositories = ["build_script_env_select"],
 )
-
 crate.annotation(
-     crate = "tokenizers",
-     workspace_cargo_toml = "tokenizers/Cargo.toml",
+    crate = "tokenizers",
+    workspace_cargo_toml = "tokenizers/Cargo.toml",
 )
 
 # Workaround not parsing `members = ["crates/*"]` yet.
 [
-    crate.annotation(crate = member, strip_prefix = "crates/" + member)
+    crate.annotation(
+        crate = member,
+        strip_prefix = "crates/" + member,
+    )
     for member in [
         "uv",
         "uv-performance-memory-allocator",
