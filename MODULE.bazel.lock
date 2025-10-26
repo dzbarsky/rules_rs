@@ -730,7 +730,7 @@
     },
     "@@rules_go+//go:extensions.bzl%go_sdk": {
       "os:osx,arch:aarch64": {
-        "bzlTransitiveDigest": "P5uZLPqsyAy7fKfdNE1XyC8TgJXTiEQFxDnzbjEOwOw=",
+        "bzlTransitiveDigest": "k/NScQzjEa2itkhbxva7odz8wezKzpc+MydRehjGKZQ=",
         "usagesDigest": "J2NmPf71kt5+0kQTwisWfSjgSd0N0XbMUy0hmzzASd0=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
