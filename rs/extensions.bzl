@@ -224,7 +224,7 @@ def _generate_hub_and_spokes(
                 ]
 
                 for target, value in cargo_toml_json.get("target", {}).items():
-                    for dep, spec in value["dependencies"].items():
+                    for dep, spec in value.get("dependencies", {}).items():
                         converted = _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json)
                         converted["target"] = target
                         dependencies.append(converted)
