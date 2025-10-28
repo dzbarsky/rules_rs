@@ -3,6 +3,8 @@ load(":cargo_credentials.bzl", "registry_auth_headers")
 load(":default_annotation.bzl", "DEFAULT_CRATE_ANNOTATION")
 load(":toml2json.bzl", "run_toml2json")
 
+CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
+
 def parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
     parts = url.split("#")
@@ -101,23 +103,23 @@ def start_crate_registry_downloads(
         if not source:
             continue
 
+
         if source == "registry+https://github.com/rust-lang/crates.io-index":
-            source = "sparse+https://index.crates.io/"
+            source = CRATES_IO_REGISTRY
             package["source"] = source
-        elif not source.startswith("sparse+"):
-            continue
+            # We hardcode the response for crates.io to avoid a fetch in
+            # the common case when not using a custom registry.
+            # TODO(zbarsky): This could be solved more cleanly by using a repository rule
+            # to do these fetches, thus making them lazy.
+        elif source.startswith("sparse+") and source not in state.in_flight_sparse_registry_configs_by_source:
+            registry = source.removeprefix("sparse+")
 
-        if source in state.in_flight_sparse_registry_configs_by_source:
-            continue
-
-        registry = source.removeprefix("sparse+")
-
-        state.in_flight_sparse_registry_configs_by_source[source] = mctx.download(
-            registry + "config.json",
-            source.replace("/", "_") + "config.json",
-            headers = registry_auth_headers(cargo_credentials, source),
-            block = False,
-        )
+            state.in_flight_sparse_registry_configs_by_source[source] = mctx.download(
+                registry + "config.json",
+                source.replace("/", "_") + "config.json",
+                headers = registry_auth_headers(cargo_credentials, source),
+                block = False,
+            )
 
     for package in packages:
         source = package.get("source")
@@ -283,7 +285,11 @@ def download_metadata_for_git_crates(
                 package["cargo_toml_json"] = cargo_toml_json
 
 def download_sparse_registry_configs(mctx, state):
-    sparse_registry_configs = {}
+    # Hardcoded one to avoid the fetch...
+    sparse_registry_configs = {
+        CRATES_IO_REGISTRY: "https://static.crates.io/crates/{crate}/{version}/download",
+    }
+
     for source, token in state.in_flight_sparse_registry_configs_by_source.items():
         token.wait()
         dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
