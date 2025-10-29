@@ -443,7 +443,6 @@ def _generate_hub_and_spokes(
 
             crate_git_repository(
                 name = repo_name,
-                init_submodules = True,
                 strip_prefix = strip_prefix,
                 commit = commit,
                 remote = remote,
