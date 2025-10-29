@@ -1,6 +1,12 @@
 {
   "homepage": "https://github.com/dzbarsky/rules_rs",
-  "maintainers": [],
+  "maintainers": [
+    {
+      "name": "David Zbarsky",
+      "email": "dzbarsky@gmail.com",
+      "github": "dzbarsky"
+    }
+  ],
   "repository": ["github:dzbarsky/rules_rs"],
   "versions": [],
   "yanked_versions": {}
