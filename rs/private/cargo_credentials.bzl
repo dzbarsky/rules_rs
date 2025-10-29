@@ -1,4 +1,4 @@
-load("@aspect_bazel_lib//lib:repo_utils.bzl", "repo_utils")
+load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load(":toml2json.bzl", "run_toml2json")
 
 def load_cargo_credentials(mctx, cargo_config):
