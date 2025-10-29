@@ -24,13 +24,13 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
         name = "toml2json_" + name,
         executable = True,
         sha256 = sha256,
-        url = "https://github.com/dzbarsky/toml2json/releases/download/v0.0.3/toml2json_" + name,
+        url = "https://github.com/dzbarsky/toml2json/releases/download/v0.0.4/toml2json_" + name,
     )
     for name, sha256 in [
         ("darwin_arm64", "9adc44d976e8f5baf5a6d613ceb3db6e5f56b2e22e75ac56521fdce62f227d88"),
-        ("darwin_x86_64", "425bac4015394fd9840fabcd52ac60fc796a9c10655b36c57e36ffb7dc9f3dd4"),
+        ("darwin_amd64", "425bac4015394fd9840fabcd52ac60fc796a9c10655b36c57e36ffb7dc9f3dd4"),
         ("linux_arm64", "be8376c8e3232a242eae0d187f741a475498a949b942361a9af6e95072ef5670"),
-        ("linux_x86_64", "f3dd54fabf2d27d0c027b0421860e5d9d909080be1613f0ffd87057633b65e9a"),
+        ("linux_amd64", "f3dd54fabf2d27d0c027b0421860e5d9d909080be1613f0ffd87057633b65e9a"),
     ]
 ]
 
