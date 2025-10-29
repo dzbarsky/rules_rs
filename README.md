@@ -5,7 +5,9 @@ extremely fast, incremental resolution without the Bazel-specific Cargo lockfile
 
 ## Installation
 
+```
 bazel_dep(name = "rules_rs", version = "0.0.1")
+```
 
 ## Usage
 Usage is basically the same as in rules_rust, with a few attributes renamed for clarity.
