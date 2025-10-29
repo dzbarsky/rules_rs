@@ -533,7 +533,7 @@ RESOLVED_PLATFORMS = select({{
     "//conditions:default": ["@platforms//:incompatible"],
 }})
 """.format(
-            target_compatible_with = ",\n        ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
+            target_compatible_with = ",\n    ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
         )
 
     _date(mctx, "done")
