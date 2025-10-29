@@ -885,7 +885,7 @@ crate = module_extension(
 def _hub_repo_impl(rctx):
     for path, contents in rctx.attr.contents.items():
         rctx.file(path, contents)
-    rctx.file("WORKSPACE.bazel", 'workspace(name = "%s")' % rctx.name)
+    rctx.file("REPO.bazel", "")
 
 _hub_repo = repository_rule(
     implementation = _hub_repo_impl,
