@@ -8,9 +8,13 @@ DISABLED = [
     #"multiple_versions_for_dependency",
     #"platform_dep_features",
 ]
-TESTS = [f for f in glob(["*"], exclude_directories = 0) if "." not in f and "bazel-" not in f and f not in DISABLED]
+
+TESTS = [f for f in glob(
+    ["*"],
+    exclude_directories = 0,
+) if "." not in f and "bazel-" not in f and f not in DISABLED]
 
 filegroup(
     name = "all_builds",
-    srcs = ["@%s//:_workspace_deps"  % test for test in TESTS],
+    srcs = ["@%s//:_workspace_deps" % test for test in TESTS],
 )
