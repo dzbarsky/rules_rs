@@ -3,5 +3,6 @@ bazel-*
 .idea/
 .ijwb/
 *.swp
+target
 
 toml2json/target

@@ -103,7 +103,6 @@ def start_crate_registry_downloads(
         if not source:
             continue
 
-
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             source = CRATES_IO_REGISTRY
             package["source"] = source

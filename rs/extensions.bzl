@@ -207,6 +207,8 @@ def _generate_hub_and_spokes(
                 annotation = annotations.get(name, DEFAULT_CRATE_ANNOTATION)
                 info = package.get("member_crate_cargo_toml_info")
                 if info:
+                    # TODO(zbarsky): These tokens got enqueues last, so this can bottleneck
+                    # We can try a bit harder to interleave things if we care.
                     info.token.wait()
                     workspace_cargo_toml_json = package["workspace_cargo_toml_json"]
                     cargo_toml_json = run_toml2json(mctx, wasm_blob, info.path)
@@ -659,9 +661,6 @@ def _crate_impl(mctx):
             # so we want to enqueue them early so they don't get delayed by 1-shot registry downloads.
             start_github_downloads(mctx, downloader_state, annotations, parsed_packages)
 
-    for fetch_state in downloader_state.in_flight_git_crate_fetches_by_url.values():
-        fetch_state.download_token.wait()
-
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
             annotations = {
@@ -685,6 +684,9 @@ def _crate_impl(mctx):
                 cargo_credentials = {}
 
             start_crate_registry_downloads(mctx, downloader_state, wasm_blob, annotations, packages_by_hub_name[cfg.name], cargo_credentials, cfg.debug)
+
+    for fetch_state in downloader_state.in_flight_git_crate_fetches_by_url.values():
+        fetch_state.download_token.wait()
 
     download_metadata_for_git_crates(mctx, downloader_state, wasm_blob, annotations)
     # TODO(zbarsky): Unfortunate that we block on the download for crates.io even though it's well-known.
