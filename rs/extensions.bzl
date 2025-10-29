@@ -87,7 +87,6 @@ Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
 
 def _generate_hub_and_spokes(
         mctx,
-        wasm_blob,
         hub_name,
         annotations,
         cargo_path,
@@ -103,7 +102,6 @@ def _generate_hub_and_spokes(
 
     Args:
         mctx (module_ctx): The module context object.
-        wasm_blob (string): The loaded wasm module, if any. If unset, the native binary is used.
         hub_name (string): name
         annotations (dict): Annotation tags to apply.
         cargo_path (path): Path to hermetic `cargo` binary.
@@ -211,7 +209,7 @@ def _generate_hub_and_spokes(
                     # We can try a bit harder to interleave things if we care.
                     info.token.wait()
                     workspace_cargo_toml_json = package["workspace_cargo_toml_json"]
-                    cargo_toml_json = run_toml2json(mctx, wasm_blob, info.path)
+                    cargo_toml_json = run_toml2json(mctx, info.path)
                 else:
                     cargo_toml_json = package["cargo_toml_json"]
                     workspace_cargo_toml_json = package.get("workspace_cargo_toml_json")
@@ -401,7 +399,6 @@ def _generate_hub_and_spokes(
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
-            use_wasm = wasm_blob != None,
             patch_args = annotation.patch_args,
             patch_tool = annotation.patch_tool,
             patches = annotation.patches,
@@ -646,14 +643,8 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
-            wasm_blob = None
-            if cfg.use_wasm:
-                if toml2json == None:
-                    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-                wasm_blob = toml2json
-
             mctx.watch(cfg.cargo_lock)
-            cargo_lock = run_toml2json(mctx, wasm_blob, cfg.cargo_lock)
+            cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock["package"]
             packages_by_hub_name[cfg.name] = parsed_packages
 
@@ -669,26 +660,20 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
-            wasm_blob = None
-            if cfg.use_wasm:
-                if toml2json == None:
-                    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-                wasm_blob = toml2json
-
             if cfg.use_home_cargo_credentials:
                 if not cfg.cargo_config:
                     fail("Must provide cargo_config when using cargo credentials")
 
-                cargo_credentials = load_cargo_credentials(mctx, wasm_blob, cfg.cargo_config)
+                cargo_credentials = load_cargo_credentials(mctx, cfg.cargo_config)
             else:
                 cargo_credentials = {}
 
-            start_crate_registry_downloads(mctx, downloader_state, wasm_blob, annotations, packages_by_hub_name[cfg.name], cargo_credentials, cfg.debug)
+            start_crate_registry_downloads(mctx, downloader_state, annotations, packages_by_hub_name[cfg.name], cargo_credentials, cfg.debug)
 
     for fetch_state in downloader_state.in_flight_git_crate_fetches_by_url.values():
         fetch_state.download_token.wait()
 
-    download_metadata_for_git_crates(mctx, downloader_state, wasm_blob, annotations)
+    download_metadata_for_git_crates(mctx, downloader_state, annotations)
     # TODO(zbarsky): Unfortunate that we block on the download for crates.io even though it's well-known.
     # Should we hardcode it?
     sparse_registry_configs = download_sparse_registry_configs(mctx, downloader_state)
@@ -708,17 +693,11 @@ def _crate_impl(mctx):
                 if cfg.name in (annotation.repositories or [cfg.name])
             }
 
-            wasm_blob = None
-            if cfg.use_wasm:
-                if toml2json == None:
-                    toml2json = mctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-                wasm_blob = toml2json
-
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, wasm_blob, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
@@ -748,7 +727,6 @@ _from_cargo = tag_class(
             mandatory = True,
         ),
         "debug": attr.bool(),
-        "use_wasm": attr.bool(),
     },
 )
 

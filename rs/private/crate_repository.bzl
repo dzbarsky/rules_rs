@@ -5,15 +5,10 @@ load(":repository_utils.bzl", "generate_build_file", "common_attrs")
 load(":toml2json.bzl", "run_toml2json")
 
 def _crate_repository_impl(rctx):
-    if rctx.attr.use_wasm:
-        wasm_blob = rctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-    else:
-        wasm_blob = None
-
     # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
     if rctx.attr.use_home_cargo_credentials:
         headers = registry_auth_headers(
-            load_cargo_credentials(rctx, wasm_blob, rctx.attr.cargo_config),
+            load_cargo_credentials(rctx, rctx.attr.cargo_config),
             rctx.attr.source,
         )
     else:
@@ -30,7 +25,7 @@ def _crate_repository_impl(rctx):
 
     patch(rctx)
 
-    cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
+    cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 

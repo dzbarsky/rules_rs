@@ -196,7 +196,6 @@ common_attrs = {
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
-    "use_wasm": attr.bool(),
 } | {
     "strip_prefix": attr.string(
         default = "",

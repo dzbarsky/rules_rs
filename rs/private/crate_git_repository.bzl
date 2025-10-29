@@ -5,7 +5,7 @@ load(":toml2json.bzl", "run_toml2json")
 
 # TODO(zbarsky): Fix this up once Fabian fixes the upstream
 # https://github.com/bazelbuild/bazel/blob/master/tools/build_defs/repo/git.bzl#L32
-def _clone_or_update_repo(ctx, wasm_blob):
+def _clone_or_update_repo(ctx):
     root = ctx.path(".")
     directory = str(root)
     if ctx.attr.strip_prefix:
@@ -17,7 +17,7 @@ def _clone_or_update_repo(ctx, wasm_blob):
     workspace_cargo_toml = None
 
     if ctx.attr.strip_prefix:
-        workspace_cargo_toml = run_toml2json(ctx, wasm_blob, directory.get_child(ctx.attr.workspace_cargo_toml))
+        workspace_cargo_toml = run_toml2json(ctx, directory.get_child(ctx.attr.workspace_cargo_toml))
 
         dest_link = "{}/{}".format(directory, ctx.attr.strip_prefix)
         if not ctx.path(dest_link).exists:
@@ -41,12 +41,7 @@ _INHERITABLE_FIELDS = [
 ]
 
 def _crate_git_repository_implementation(rctx):
-    if rctx.attr.use_wasm:
-        wasm_blob = rctx.load_wasm(Label("@rules_rs//toml2json:toml2json.wasm"))
-    else:
-        wasm_blob = None
-
-    workspace_cargo_toml = _clone_or_update_repo(rctx, wasm_blob)
+    workspace_cargo_toml = _clone_or_update_repo(rctx)
     patch(rctx)
 
     if rctx.attr.strip_prefix:
@@ -54,7 +49,7 @@ def _crate_git_repository_implementation(rctx):
     else:
         rctx.delete(rctx.path(".git"))
 
-    cargo_toml = run_toml2json(rctx, wasm_blob, "Cargo.toml")
+    cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
     if workspace_cargo_toml:
         workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")

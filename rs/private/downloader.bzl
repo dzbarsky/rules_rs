@@ -91,7 +91,6 @@ def start_github_downloads(
 def start_crate_registry_downloads(
         mctx,
         state,
-        wasm_blob,
         annotations,
         packages,
         cargo_credentials,
@@ -225,13 +224,12 @@ def _compute_strip_prefix(annotation, cargo_toml_json, name):
 def download_metadata_for_git_crates(
         mctx,
         state,
-        wasm_blob,
         annotations):
     for url, fetch_state in state.in_flight_git_crate_fetches_by_url.items():
         cargo_toml_path = url.replace("/", "_")
         _ensure_cargo_toml_exists(mctx.path(cargo_toml_path), fetch_state)
 
-        cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_path)
+        cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
 
         for package in fetch_state.packages:
             name = package["name"]
@@ -264,7 +262,7 @@ def download_metadata_for_git_crates(
         annotation = annotations.get(clone_state.packages[0]["name"], DEFAULT_CRATE_ANNOTATION)
         cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
         _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
-        cargo_toml_json = run_toml2json(mctx, wasm_blob, cargo_toml_path)
+        cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
 
         for package in clone_state.packages:
             name = package["name"]
@@ -279,7 +277,7 @@ def download_metadata_for_git_crates(
                 package["strip_prefix"] = strip_prefix
                 package["workspace_cargo_toml_json"] = cargo_toml_json
                 child_cargo_toml_path = str(cargo_toml_path).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
-                package["cargo_toml_json"] = run_toml2json(mctx, wasm_blob, child_cargo_toml_path)
+                package["cargo_toml_json"] = run_toml2json(mctx, child_cargo_toml_path)
             else:
                 package["cargo_toml_json"] = cargo_toml_json
 
