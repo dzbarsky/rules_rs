@@ -306,7 +306,7 @@ def cfg_matches(expr, triple, features=[], target_features=[]):
 
 def cfg_matches_expr_for_triples(expr, triples, features=[], target_features=[]):
     cfg_attrs = [triple_to_cfg_attrs(triple, features, target_features) for triple in triples]
-    return cfg_matches_expr_for_cfg_attrs(cfg_parse(expr), cfg_attrs, features, target_features)
+    return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features, target_features)
 
 def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[], target_features=[]):
     return cfg_matches_ast_for_triples(cfg_parse(expr), cfg_attrs)

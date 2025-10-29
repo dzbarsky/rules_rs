@@ -48,18 +48,12 @@ def _cfg_parser_smoke_test_impl(ctx):
     triples = [mac, linux_gnu, linux_musl, win]
 
     results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
-    asserts.false(env, results[mac])
-    asserts.true(env, results[linux_gnu])
-    asserts.true(env, results[linux_musl])
-    asserts.false(env, results[win])
+    asserts.equals(env, results, [linux_gnu, linux_musl])
 
     results = cfg_matches_expr_for_triples(
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
         triples)
-    asserts.true(env, results[mac])
-    asserts.true(env, results[linux_gnu])
-    asserts.true(env, results[linux_musl])
-    asserts.true(env, results[win])
+    asserts.equals(env, results, triples)
 
     return unittest.end(env)
 
