@@ -718,12 +718,17 @@ _from_cargo = tag_class(
             default = "crates",
         ),
     } | {
-        "cargo_toml": attr.label(),
+        "cargo_toml": attr.label(
+            doc = "The workspace-level Cargo.toml. There can be multiple crates in the workspace."
+        ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
-        "use_home_cargo_credentials": attr.bool(),
+        "use_home_cargo_credentials": attr.bool(
+            doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests."
+        ),
         "platform_triples": attr.string_list(
             mandatory = True,
+            doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build."
         ),
         "debug": attr.bool(),
     },

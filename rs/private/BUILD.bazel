@@ -1,6 +1,110 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":semver_test.bzl", "semver_select_tests")
 
 cfg_parser_tests()
 
 semver_select_tests()
+
+bzl_library(
+    name = "all_crate_deps",
+    srcs = ["all_crate_deps.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":rust_deps"],
+)
+
+bzl_library(
+    name = "cargo_credentials",
+    srcs = ["cargo_credentials.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":toml2json",
+        "@bazel_lib//lib:repo_utils",
+    ],
+)
+
+bzl_library(
+    name = "cfg_parser",
+    srcs = ["cfg_parser.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "crate_git_repository",
+    srcs = ["crate_git_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":repository_utils",
+        ":toml2json",
+        "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
+    ],
+)
+
+bzl_library(
+    name = "crate_repository",
+    srcs = ["crate_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":cargo_credentials",
+        ":repository_utils",
+        ":toml2json",
+        "@bazel_tools//tools/build_defs/repo:cache.bzl",
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
+    ],
+)
+
+bzl_library(
+    name = "default_annotation",
+    srcs = ["default_annotation.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "downloader",
+    srcs = ["downloader.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":cargo_credentials",
+        ":default_annotation",
+        ":toml2json",
+        "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
+    ],
+)
+
+bzl_library(
+    name = "repository_utils",
+    srcs = ["repository_utils.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":semver"],
+)
+
+bzl_library(
+    name = "resolver",
+    srcs = ["resolver.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "rust_deps",
+    srcs = ["rust_deps.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    # keep
+    deps = [
+        "@rules_cc//cc/common",
+        "@rules_rust//rust:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "semver",
+    srcs = ["semver.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "toml2json",
+    srcs = ["toml2json.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = ["@bazel_lib//lib:repo_utils"],
+)
