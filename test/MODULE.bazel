@@ -1,12 +1,20 @@
-bazel_dep(name = "toolchains_llvm", version = "1.5.0")
-
-llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
-llvm.toolchain(
-    llvm_version = "17.0.6",
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.1.5")
+#local_path_override(
+#    module_name = "toolchains_llvm_bootstrapped",
+#    path = "../../toolchains_llvm_bootstrapped",
+#)
+archive_override(
+    module_name = "toolchains_llvm_bootstrapped",
+    strip_prefix = "toolchains_llvm_bootstrapped-ee79305b6b01fcc4688abeaa35c7113580a1135d",
+    integrity = "sha256-9IXGl6OcENEg0QrOuPQr7b+/XiFIyG9o1KcWN3pc9sE=",
+    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/ee79305b6b01fcc4688abeaa35c7113580a1135d.tar.gz"],
+    patches = ["//:toolchains_llvm_bootstrapped.patch"],
+    patch_strip = 1,
 )
-use_repo(llvm, "llvm_toolchain")
-
-register_toolchains("@llvm_toolchain//:all")
+bazel_dep(name = "with_cfg.bzl", version = "0.12.0")
+register_toolchains(
+    "@toolchains_llvm_bootstrapped//toolchain:all",
+)
 
 bazel_dep(name = "rules_rust", version = "0.66.0")
 #local_path_override(
