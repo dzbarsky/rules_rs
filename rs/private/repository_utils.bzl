@@ -22,6 +22,8 @@ def _select(non_platform_items, platform_items):
         if not common_items:
             break
 
+    common_items.update(non_platform_items)
+
     branches = []
 
     for triple, items in platform_items.items():
