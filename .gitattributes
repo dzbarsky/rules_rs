@@ -1,7 +1,6 @@
 # In code review, collapse generated files
 docs/*.md linguist-generated=true
 
-test export-ignore
 gazelle export-ignore
 
 # Occasionally there's a need to "stamp" the release version into a file
