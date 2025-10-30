@@ -36,3 +36,5 @@ crate.annotation(
 ```
 
 `crate.spec` and vendoring mode are currently unsupported.
+
+Windows is unsupported until we get [toml2json](https://github.com/dzbarsky/toml2json) prebuilts.
