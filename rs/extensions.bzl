@@ -627,6 +627,7 @@ def _crate_impl(mctx):
     cargo_path = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
     # And toml2json
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
+    repo_root = str(mctx.path(Label("@@//:all"))).removesuffix("all")
 
     downloader_state = new_downloader_state()
 
