@@ -15,13 +15,12 @@ ARCHIVE="rules_rs-$TAG.tar.gz"
 git archive --format=tar --prefix=${PREFIX}/ ${TAG} | gzip > $ARCHIVE
 
 # Add generated API docs to the release, see https://github.com/bazelbuild/bazel-central-registry/issues/5593
-# Note, we use xargs here because the repo is on Bazel 7.4 which doesn't have the --output_file flag to bazel query
-docs="$(mktemp -d)"
-bazel --output_base="$docs" query --output=label 'kind("starlark_doc_extract rule", //rs/...)' | xargs bazel --output_base="$docs" build
+docs="$(mktemp -d)"; targets="$(mktemp)"
+bazel --output_base="$docs" query --output=label --output_file="$targets" 'kind("starlark_doc_extract rule", //rs/...)'
+bazel --output_base="$docs" build --target_pattern_file="$targets"
 tar --create --auto-compress \
     --directory "$(bazel --output_base="$docs" info bazel-bin)" \
     --file "$GITHUB_WORKSPACE/${ARCHIVE%.tar.gz}.docs.tar.gz" .
-
 
 cat << EOF
 ## Add to your \`MODULE.bazel\` file:
