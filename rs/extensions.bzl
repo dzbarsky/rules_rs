@@ -1,3 +1,4 @@
+load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -622,10 +623,10 @@ def _compute_workspace_fq_deps(workspace_members, versions_by_name):
     return workspace_fq_deps
 
 def _crate_impl(mctx):
-    toml2json = None
-
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
     cargo_path = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
+    # And toml2json
+    toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
 
     downloader_state = new_downloader_state()
 
