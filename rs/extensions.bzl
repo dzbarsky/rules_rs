@@ -80,9 +80,14 @@ Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
             workspace["dependencies"][dep],
             is_build,
         )
+
         extra_features = spec.get("features")
         if extra_features:
             inherited["features"] = sorted(set(extra_features + inherited.get("features", [])))
+
+        if spec.get("optional"):
+            inherited["optional"] = True
+
         return inherited
     return _spec_to_dep_dict_inner(dep, spec, is_build)
 
