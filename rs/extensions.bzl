@@ -316,7 +316,7 @@ def _generate_hub_and_spokes(
 
     workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
-    workspace_deps = set()
+    workspace_dep_versions_by_name = {}
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
     watch_manifests = cargo_lock_path.repo_name == ""
@@ -333,7 +333,6 @@ def _generate_hub_and_spokes(
                 continue
 
             name = dep["name"]
-            workspace_deps.add(name)
 
             features = dep["features"]
             if dep["uses_default_features"]:
@@ -342,6 +341,12 @@ def _generate_hub_and_spokes(
             dep_fq = fq_deps[name]
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+
+            versions = workspace_dep_versions_by_name.get(name)
+            if not versions:
+                versions = set()
+                workspace_dep_versions_by_name[name] = versions
+            versions.add(dep_fq)
 
             target = dep.get("target")
             match = cfg_match_cache.get(target)
@@ -367,6 +372,22 @@ def _generate_hub_and_spokes(
     _date(mctx, "set up initial deps!")
 
     resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
+
+    # Validate that we aren't trying to enable any `dep:foo` features that were not even in the lockfile.
+    for package in packages:
+        feature_resolutions = package["feature_resolutions"]
+        features_enabled = feature_resolutions.features_enabled
+
+        for dep in feature_resolutions.possible_deps:
+            if "bazel_target" in dep:
+                continue
+
+            prefixed_dep_alias = "dep:" + dep["name"]
+
+            for triple in platform_triples:
+                if prefixed_dep_alias in features_enabled[triple]:
+                    fail("Crate %s has enabled %s but it was not in the lockfile..." % (package["name"], prefixed_dep_alias))
+                    continue
 
     mctx.report_progress("Initializing spokes")
 
@@ -469,15 +490,16 @@ alias(
                 spoke_repo = _spoke_repo(hub_name, name, version),
             ))
 
-        hub_contents.append("""
+        workspace_versions = workspace_dep_versions_by_name.get(name)
+        if workspace_versions:
+            hub_contents.append("""
 alias(
     name = "{name}",
-    actual = ":{name}-{version}",
+    actual = ":{fq}",
 )""".format(
-            name = name,
-            # TODO(zbarsky): Select max version?
-            version = versions[-1],
-        ))
+                name = name,
+                fq = sorted(workspace_versions)[-1],
+            ))
 
     hub_contents.append(
         """
@@ -490,7 +512,7 @@ filegroup(
     srcs = [
        %s 
     ],
-)""" % ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_deps)]),
+)""" % ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_dep_versions_by_name.keys())]),
     )
 
     defs_bzl_contents = \
@@ -625,6 +647,7 @@ def _compute_workspace_fq_deps(workspace_members, versions_by_name):
 def _crate_impl(mctx):
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
     cargo_path = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
+
     # And toml2json
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
     repo_root = str(mctx.path(Label("@@//:all"))).removesuffix("all")
@@ -675,6 +698,7 @@ def _crate_impl(mctx):
         fetch_state.download_token.wait()
 
     download_metadata_for_git_crates(mctx, downloader_state, annotations)
+
     # TODO(zbarsky): Unfortunate that we block on the download for crates.io even though it's well-known.
     # Should we hardcode it?
     sparse_registry_configs = download_sparse_registry_configs(mctx, downloader_state)
@@ -721,16 +745,16 @@ _from_cargo = tag_class(
         ),
     } | {
         "cargo_toml": attr.label(
-            doc = "The workspace-level Cargo.toml. There can be multiple crates in the workspace."
+            doc = "The workspace-level Cargo.toml. There can be multiple crates in the workspace.",
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
         "use_home_cargo_credentials": attr.bool(
-            doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests."
+            doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),
         "platform_triples": attr.string_list(
             mandatory = True,
-            doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build."
+            doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build.",
         ),
         "debug": attr.bool(),
     },
