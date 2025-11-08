@@ -17,5 +17,7 @@ TESTS = [f for f in glob(
 
 filegroup(
     name = "all_builds",
-    srcs = ["@%s//:_workspace_deps" % test for test in TESTS],
+    srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
+        "@binaries//:protoc-gen-prost__protoc-gen-prost",
+    ],
 )
