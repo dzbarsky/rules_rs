@@ -424,6 +424,7 @@ def _generate_hub_and_spokes(
             deps = annotation.deps,
             deps_select = _select(feature_resolutions.deps),
             aliases = feature_resolutions.aliases,
+            gen_binaries = annotation.gen_binaries,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
             patch_args = annotation.patch_args,
@@ -484,27 +485,41 @@ def _generate_hub_and_spokes(
 
     hub_contents = []
     for name, versions in versions_by_name.items():
+        binaries = annotations.get(name, DEFAULT_CRATE_ANNOTATION).gen_binaries
+
         for version in versions:
+            spoke_repo = _spoke_repo(hub_name, name, version)
+
             hub_contents.append("""
 alias(
     name = "{name}-{version}",
     actual = "@{spoke_repo}//:{name}",
-)""".format(
-                name = name,
-                version = version,
-                spoke_repo = _spoke_repo(hub_name, name, version),
-            ))
+)""".format(name = name, version = version, spoke_repo = spoke_repo))
+
+            for binary in binaries:
+                hub_contents.append("""
+alias(
+    name = "{name}-{version}__{binary}",
+    actual = "@{spoke_repo}//:{binary}__bin",
+)""".format(name = name, version = version, binary = binary, spoke_repo = spoke_repo))
 
         workspace_versions = workspace_dep_versions_by_name.get(name)
         if workspace_versions:
+            fq = sorted(workspace_versions)[-1]
+
             hub_contents.append("""
 alias(
     name = "{name}",
     actual = ":{fq}",
-)""".format(
-                name = name,
-                fq = sorted(workspace_versions)[-1],
-            ))
+)""".format(name = name, fq = fq))
+
+            for binary in binaries:
+                hub_contents.append("""
+alias(
+    name = "{name}__{binary}",
+    actual = ":{fq}__{binary}",
+)""".format(name = name, fq = fq, binary = binary))
+
 
     hub_contents.append(
         """
@@ -858,9 +873,9 @@ _annotation = tag_class(
         # "gen_all_binaries": attr.bool(
         #     doc = "If true, generates `rust_binary` targets for all of the crates bins",
         # ),
-        # "gen_binaries": attr.string_list(
-        #     doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
-        # ),
+        "gen_binaries": attr.string_list(
+            doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
+        ),
         "gen_build_script": attr.string(
             doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",
             values = ["auto", "on", "off"],

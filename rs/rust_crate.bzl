@@ -1,6 +1,6 @@
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
 load("@rules_rust//cargo/private:cargo_build_script_wrapper.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
 
 def rust_crate(
@@ -21,16 +21,15 @@ def rust_crate(
         build_deps,
         build_script_env,
         build_script_toolchains,
-        is_proc_macro):
+        is_proc_macro,
+        binaries):
 
     package_metadata(
-        name = "package_metadata",
+        name = name + "_package_metadata",
         # TODO(zbarsky): repository url for git deps?
         purl = "pkg:cargo/%s/%s" % (crate_name, version),
         visibility = ["//visibility:public"],
     )
-
-    native.package(default_package_metadata = ["//:package_metadata"])
 
     compile_data = native.glob(
         include = ["**"],
@@ -111,6 +110,8 @@ def rust_crate(
         proc_macros = True,
     )
 
+    deps = [name + "_deps"] + maybe_build_script
+
     kwargs = dict(
         name = name,
         crate_name = crate_name,
@@ -118,7 +119,7 @@ def rust_crate(
         srcs = srcs,
         compile_data = compile_data,
         aliases = aliases,
-        deps = [name + "_deps"] + maybe_build_script,
+        deps = deps,
         data = data,
         proc_macro_deps = [name + "_proc_macro_deps"],
         crate_features = crate_features,
@@ -128,6 +129,7 @@ def rust_crate(
         rustc_flags = rustc_flags + ["--cap-lints=allow"],
         tags = tags,
         target_compatible_with = target_compatible_with,
+        package_metadata = [name + "_package_metadata"],
         visibility = ["//visibility:public"],
     )
 
@@ -135,3 +137,22 @@ def rust_crate(
         rust_proc_macro(**kwargs)
     else:
         rust_library(**kwargs)
+
+    for binary, crate_root in binaries.items():
+        rust_binary(
+            name = binary + "__bin",
+            compile_data = compile_data,
+            aliases = aliases,
+            deps = [name] + deps,
+            data = data,
+            crate_features = crate_features,
+            crate_root = crate_root,
+            edition = edition,
+            rustc_env_files = ["cargo_toml_env_vars.env"],
+            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            srcs = srcs,
+            tags = tags,
+            target_compatible_with = target_compatible_with,
+            version = version,
+            visibility = ["//visibility:public"],
+        )

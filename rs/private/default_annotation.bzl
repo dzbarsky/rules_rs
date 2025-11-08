@@ -10,6 +10,7 @@ DEFAULT_CRATE_ANNOTATION = struct(
     data = [],
     deps = [],
     crate_features = [],
+    gen_binaries = [],
     rustc_flags = [],
     patch_args = [],
     patch_tool = None,

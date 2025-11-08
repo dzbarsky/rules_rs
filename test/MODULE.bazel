@@ -53,6 +53,7 @@ TESTS = [
     "multiple_versions_for_dependency",
     "optional_build_deps",
     "platform_dep_features",
+    "binaries",
     "uv",
 ]
 
@@ -93,6 +94,12 @@ crate.annotation(
 crate.annotation(
     crate = "tokenizers",
     workspace_cargo_toml = "tokenizers/Cargo.toml",
+)
+
+# Test gen_binaries
+crate.annotation(
+    crate = "protoc-gen-prost",
+    gen_binaries = ["protoc-gen-prost"],
 )
 
 # Workaround not parsing `members = ["crates/*"]` yet.

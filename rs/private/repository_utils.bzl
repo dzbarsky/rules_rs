@@ -109,6 +109,7 @@ def generate_build_file(rctx, cargo_toml):
 
     build_content = \
 """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(
@@ -138,6 +139,7 @@ rust_crate(
     build_script_env = {build_script_env}{conditional_build_script_env},
     build_script_toolchains = {build_script_toolchains},
     is_proc_macro = {is_proc_macro},
+    binaries = {binaries},
 )
 """
 
@@ -152,6 +154,8 @@ rust_crate(
     deps, conditional_deps = _select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
 
     conditional_build_script_env = _select_build_script_env(attr.build_script_env_select)
+
+    binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
 
     return build_content.format(
         name = repr(name),
@@ -177,6 +181,7 @@ rust_crate(
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
         is_proc_macro = repr(is_proc_macro),
+        binaries = binaries,
     )
 
 common_attrs = {
@@ -198,6 +203,7 @@ common_attrs = {
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
+    "gen_binaries": attr.string_list(),
 } | {
     "strip_prefix": attr.string(
         default = "",
