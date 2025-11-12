@@ -36,3 +36,11 @@ crate.annotation(
 ```
 
 `crate.spec` and vendoring mode are currently unsupported.
+
+# Public API
+
+See https://registry.bazel.build/docs/rules_rs
+
+## Telemetry & privacy policy
+
+This ruleset collects limited usage data via [`tools_telemetry`](https://github.com/aspect-build/tools_telemetry), which is reported to Aspect Build Inc and governed by their [privacy policy](https://www.aspect.build/privacy-policy).
