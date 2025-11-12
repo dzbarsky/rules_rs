@@ -13,6 +13,8 @@
     "https://bcr.bazel.build/modules/apple_support/1.23.0/MODULE.bazel": "317d47e3f65b580e7fb4221c160797fda48e32f07d2dfff63d754ef2316dcd25",
     "https://bcr.bazel.build/modules/apple_support/1.23.1/MODULE.bazel": "53763fed456a968cf919b3240427cf3a9d5481ec5466abc9d5dc51bc70087442",
     "https://bcr.bazel.build/modules/apple_support/1.23.1/source.json": "d888b44312eb0ad2c21a91d026753f330caa48a25c9b2102fae75eb2b0dcfdd2",
+    "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.3.0/MODULE.bazel": "64921eb138bdc0c57723f7ff42a5bc0b460471fb124cbf508101ca68ca9d1c33",
+    "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.3.0/source.json": "5bb794bce1c07301a5554897c3f87774c12120a9f78cc5f814a01ecb6d803286",
     "https://bcr.bazel.build/modules/bazel_features/1.1.0/MODULE.bazel": "cfd42ff3b815a5f39554d97182657f8c4b9719568eb7fded2b9135f084bf760b",
     "https://bcr.bazel.build/modules/bazel_features/1.1.1/MODULE.bazel": "27b8c79ef57efe08efccbd9dd6ef70d61b4798320b8d3c134fd571f78963dbcd",
     "https://bcr.bazel.build/modules/bazel_features/1.11.0/MODULE.bazel": "f9382337dd5a474c3b7d334c2f83e50b6eaedc284253334cf823044a26de03e8",
@@ -185,6 +187,69 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
+      "general": {
+        "bzlTransitiveDigest": "voOu6h+obIjLZjmhCP9gOsl4nOwrvViT36dPMhDxK1Q=",
+        "usagesDigest": "PvMX6NijSO99/eNHoJXB/TqmBvMhx1jt4jOrVFY3Xg8=",
+        "recordedFileInputs": {
+          "@@//MODULE.bazel.lock": "7254cb97dbed61522bfb988831d3bd93dd1a835311eb7c68e5c27b63e446a731"
+        },
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "aspect_tools_telemetry_report": {
+            "repoRuleId": "@@aspect_tools_telemetry+//:extension.bzl%tel_repository",
+            "attributes": {
+              "deps": {
+                "abseil-cpp": "20240116.1",
+                "apple_support": "1.23.1",
+                "bazel_features": "1.32.0",
+                "bazel_lib": "3.0.0",
+                "bazel_skylib": "1.8.2",
+                "bazel_skylib_gazelle_plugin": "1.8.2",
+                "buildifier_prebuilt": "6.1.2",
+                "buildozer": "7.1.2",
+                "gazelle": "0.45.0",
+                "googletest": "1.14.0.bcr.1",
+                "jsoncpp": "1.9.5",
+                "package_metadata": "0.0.5",
+                "platforms": "1.0.0",
+                "protobuf": "29.0",
+                "pybind11_bazel": "2.11.1",
+                "re2": "2023-09-01",
+                "rules_android": "0.1.1",
+                "rules_cc": "0.2.8",
+                "rules_fuzzing": "0.5.2",
+                "rules_go": "0.58.2",
+                "rules_java": "8.14.0",
+                "rules_jvm_external": "6.3",
+                "rules_kotlin": "1.9.6",
+                "rules_license": "1.0.0",
+                "rules_pkg": "1.0.1",
+                "rules_proto": "7.0.2",
+                "rules_python": "0.40.0",
+                "rules_rust": "0.66.0",
+                "rules_shell": "0.4.1",
+                "stardoc": "0.7.1",
+                "zlib": "1.3.1.bcr.5"
+              }
+            }
+          }
+        },
+        "recordedRepoMappingEntries": [
+          [
+            "aspect_tools_telemetry+",
+            "bazel_lib",
+            "bazel_lib+"
+          ],
+          [
+            "aspect_tools_telemetry+",
+            "bazel_skylib",
+            "bazel_skylib+"
+          ]
+        ]
+      }
+    },
     "@@buildifier_prebuilt+//:defs.bzl%buildifier_prebuilt_deps_extension": {
       "general": {
         "bzlTransitiveDigest": "mvmSgXn31MdFAr/ULalH20z1NX2FLz6MOjSD1eXxn4Q=",

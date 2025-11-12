@@ -53,6 +53,9 @@ def _select_build_script_env(platform_items):
 
     return _format_branches(branches)
 
+def _exclude_deps_from_features(features):
+    return [f for f in features if not f.startswith("dep:")]
+
 def generate_build_file(rctx, cargo_toml):
     attr = rctx.attr
     package = cargo_toml["package"]
@@ -148,7 +151,10 @@ rust_crate(
     build_content += attr.additive_build_file_content
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
-    crate_features, conditional_crate_features = _select(attr.crate_features, attr.crate_features_select)
+    crate_features, conditional_crate_features = _select(
+        _exclude_deps_from_features(attr.crate_features),
+        {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
+    )
     build_deps, conditional_build_deps = _select(attr.build_script_deps, attr.build_script_deps_select)
     build_script_data, conditional_build_script_data = _select(attr.build_script_data, attr.build_script_data_select)
     deps, conditional_deps = _select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
