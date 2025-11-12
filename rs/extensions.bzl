@@ -1,5 +1,6 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -15,6 +16,9 @@ def _spoke_repo(hub_name, name, version):
     if "+" in s:
         s = s.replace("+", "-")
     return s
+
+def _external_repo_for_git_source(remote, commit):
+    return remote.replace("/", "_").replace(":", "_") + "_" + commit
 
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
@@ -473,6 +477,7 @@ def _generate_hub_and_spokes(
             crate_git_repository(
                 name = repo_name,
                 strip_prefix = strip_prefix,
+                git_repo_label = "@" + _external_repo_for_git_source(remote, commit),
                 commit = commit,
                 remote = remote,
                 verbose = debug,
@@ -520,7 +525,6 @@ alias(
     name = "{name}__{binary}",
     actual = ":{fq}__{binary}",
 )""".format(name = name, fq = fq, binary = binary))
-
 
     hub_contents.append(
         """
@@ -744,6 +748,26 @@ def _crate_impl(mctx):
                     _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
+
+    # Lay down the git repos we will need; per-crate git_repository can clone from these.
+    git_sources = set()
+    for mod in mctx.modules:
+        for cfg in mod.tags.from_cargo:
+            for package in packages_by_hub_name[cfg.name]:
+                source = package.get("source", "")
+                if source.startswith("git+"):
+                    git_sources.add(source)
+
+    for git_source in git_sources:
+        remote, commit = parse_git_url(git_source)
+
+        git_repository(
+            name = _external_repo_for_git_source(remote, commit),
+            commit = commit,
+            remote = remote,
+            # Need dummy content to lay out a BUILD file.
+            build_file_content = "#",
+        )
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,

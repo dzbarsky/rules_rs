@@ -21,3 +21,16 @@ filegroup(
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ],
 )
+
+platform(
+    name = "rbe",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "container-image": "docker://ubuntu:22.04",
+        "OSFamily": "Linux",
+    },
+)

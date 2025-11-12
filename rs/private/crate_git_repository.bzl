@@ -1,31 +1,6 @@
-load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":repository_utils.bzl", "common_attrs", "generate_build_file")
 load(":toml2json.bzl", "run_toml2json")
-
-# TODO(zbarsky): Fix this up once Fabian fixes the upstream
-# https://github.com/bazelbuild/bazel/blob/master/tools/build_defs/repo/git.bzl#L32
-def _clone_or_update_repo(ctx):
-    root = ctx.path(".")
-    directory = str(root)
-    if ctx.attr.strip_prefix:
-        directory = root.get_child(".tmp_git_root")
-
-    git_repo(ctx, directory)
-
-    # If the repo corresponds to a workspace of crates, return the root's Cargo.toml
-    workspace_cargo_toml = None
-
-    if ctx.attr.strip_prefix:
-        workspace_cargo_toml = run_toml2json(ctx, directory.get_child(ctx.attr.workspace_cargo_toml))
-
-        dest_link = "{}/{}".format(directory, ctx.attr.strip_prefix)
-        if not ctx.path(dest_link).exists:
-            fail("strip_prefix at {} does not exist in repo".format(ctx.attr.strip_prefix))
-        for item in ctx.path(dest_link).readdir():
-            ctx.symlink(item, root.get_child(item.basename))
-
-    return workspace_cargo_toml
 
 _INHERITABLE_FIELDS = [
     "version",
@@ -41,17 +16,23 @@ _INHERITABLE_FIELDS = [
 ]
 
 def _crate_git_repository_implementation(rctx):
-    workspace_cargo_toml = _clone_or_update_repo(rctx)
-    patch(rctx)
+    repo_dir = rctx.path(rctx.attr.git_repo_label).dirname
+    crate_dir = repo_dir.get_child(rctx.attr.strip_prefix) if rctx.attr.strip_prefix else repo_dir
+    if not crate_dir.exists:
+        fail("strip_prefix at {} does not exist in repo".format(rctx.attr.strip_prefix))
 
-    if rctx.attr.strip_prefix:
-        rctx.delete(rctx.path(".tmp_git_root/.git"))
-    else:
-        rctx.delete(rctx.path(".git"))
+    target_dir = rctx.path(".")
+    for item in crate_dir.readdir():
+        rctx.symlink(item, target_dir.get_child(item.basename))
+
+    # TODO(zbarsky): Will these patches properly follow the symlinks? Is that even correct?
+    # Maybe we should do a clone from the on-disk repo..
+    patch(rctx)
 
     cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
-    if workspace_cargo_toml:
+    if rctx.attr.strip_prefix:
+        workspace_cargo_toml = run_toml2json(rctx, repo_dir.get_child(rctx.attr.workspace_cargo_toml))
         workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
         if workspace_package:
             crate_package = cargo_toml["package"]
@@ -67,6 +48,7 @@ def _crate_git_repository_implementation(rctx):
 crate_git_repository = repository_rule(
     implementation = _crate_git_repository_implementation,
     attrs = {
+        "git_repo_label": attr.label(),
         "remote": attr.string(
             mandatory = True,
             doc = "The URI of the remote Git repository",
