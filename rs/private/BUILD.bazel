@@ -24,12 +24,6 @@ bzl_library(
 )
 
 bzl_library(
-    name = "cfg_parser",
-    srcs = ["cfg_parser.bzl"],
-    visibility = ["//rs:__subpackages__"],
-)
-
-bzl_library(
     name = "crate_git_repository",
     srcs = ["crate_git_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -55,12 +49,6 @@ bzl_library(
 )
 
 bzl_library(
-    name = "default_annotation",
-    srcs = ["default_annotation.bzl"],
-    visibility = ["//rs:__subpackages__"],
-)
-
-bzl_library(
     name = "downloader",
     srcs = ["downloader.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -80,12 +68,6 @@ bzl_library(
 )
 
 bzl_library(
-    name = "resolver",
-    srcs = ["resolver.bzl"],
-    visibility = ["//rs:__subpackages__"],
-)
-
-bzl_library(
     name = "rust_deps",
     srcs = ["rust_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -97,14 +79,39 @@ bzl_library(
 )
 
 bzl_library(
-    name = "semver",
-    srcs = ["semver.bzl"],
-    visibility = ["//rs:__subpackages__"],
-)
-
-bzl_library(
     name = "toml2json",
     srcs = ["toml2json.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = ["@bazel_lib//lib:repo_utils"],
+)
+
+bzl_library(
+    name = "cfg_parser",
+    srcs = ["cfg_parser.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "default_annotation",
+    srcs = ["default_annotation.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "git_repository",
+    srcs = ["git_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = ["@bazel_tools//tools/build_defs/repo:git_worker.bzl"],
+)
+
+bzl_library(
+    name = "resolver",
+    srcs = ["resolver.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "semver",
+    srcs = ["semver.bzl"],
+    visibility = ["//rs:__subpackages__"],
 )

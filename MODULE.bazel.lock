@@ -192,7 +192,7 @@
         "bzlTransitiveDigest": "voOu6h+obIjLZjmhCP9gOsl4nOwrvViT36dPMhDxK1Q=",
         "usagesDigest": "PvMX6NijSO99/eNHoJXB/TqmBvMhx1jt4jOrVFY3Xg8=",
         "recordedFileInputs": {
-          "@@//MODULE.bazel.lock": "7254cb97dbed61522bfb988831d3bd93dd1a835311eb7c68e5c27b63e446a731"
+          "@@//MODULE.bazel.lock": "dd41e537b3bac0586e12f39aed3ed9ffecea2814262befe46cc88c250e99d42c"
         },
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -203,6 +203,7 @@
               "deps": {
                 "abseil-cpp": "20240116.1",
                 "apple_support": "1.23.1",
+                "aspect_tools_telemetry": "0.3.0",
                 "bazel_features": "1.32.0",
                 "bazel_lib": "3.0.0",
                 "bazel_skylib": "1.8.2",

@@ -1,6 +1,6 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -478,9 +478,6 @@ def _generate_hub_and_spokes(
                 name = repo_name,
                 strip_prefix = strip_prefix,
                 git_repo_label = "@" + _external_repo_for_git_source(remote, commit),
-                commit = commit,
-                remote = remote,
-                verbose = debug,
                 workspace_cargo_toml = annotation.workspace_cargo_toml,
                 **kwargs
             )
@@ -765,8 +762,6 @@ def _crate_impl(mctx):
             name = _external_repo_for_git_source(remote, commit),
             commit = commit,
             remote = remote,
-            # Need dummy content to lay out a BUILD file.
-            build_file_content = "#",
         )
 
     kwargs = dict(
