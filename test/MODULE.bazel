@@ -1,25 +1,28 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.1.5")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
 
 #local_path_override(
 #    module_name = "toolchains_llvm_bootstrapped",
 #    path = "../../toolchains_llvm_bootstrapped",
 #)
-archive_override(
+single_version_override(
     module_name = "toolchains_llvm_bootstrapped",
-    integrity = "sha256-7fn4BuwbRnKbAZHa8Scfxz9YRDk2N32AGcZH/v0vE+0=",
     patch_strip = 1,
     patches = ["//:toolchains_llvm_bootstrapped.patch"],
-    strip_prefix = "toolchains_llvm_bootstrapped-647d23283832a2c55c3cf51ac808cea5520ff016",
-    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/647d23283832a2c55c3cf51ac808cea5520ff016.tar.gz"],
 )
 
 register_toolchains(
     "@toolchains_llvm_bootstrapped//toolchain:all",
 )
 
-bazel_dep(name = "rules_cc", version = "0.2.13")
-bazel_dep(name = "rules_rust", version = "0.66.0")
+bazel_dep(name = "rules_cc", version = "0.2.14")
+bazel_dep(name = "rules_rust", version = "0.67.0")
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//:rules_rust_ar.patch"],
+)
+
 #local_path_override(
 #    module_name = "rules_rust",
 #    path = "../../rules_rust",
@@ -56,7 +59,7 @@ TESTS = [
     "build_script_runtime_env",
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
-    #"git_crates",
+    "git_crates",
     # Got count 45796 in 20 rounds
     "many_workspace_deps",
     "multiple_versions_for_dependency",

@@ -7,7 +7,7 @@ DISABLED = [
     #"many_workspace_deps",
     #"multiple_versions_for_dependency",
     #"platform_dep_features",
-    "git_crates",
+    #"git_crates",
 ]
 
 TESTS = [f for f in glob(
