@@ -1,12 +1,12 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
-load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository")
 load("//rs/private:default_annotation.bzl", "DEFAULT_CRATE_ANNOTATION")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
@@ -18,7 +18,7 @@ def _spoke_repo(hub_name, name, version):
     return s
 
 def _external_repo_for_git_source(remote, commit):
-    return remote.replace("/", "_").replace(":", "_") + "_" + commit
+    return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
 
 def _platform(triple):
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
