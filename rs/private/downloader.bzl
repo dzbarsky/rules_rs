@@ -30,6 +30,9 @@ def _parse_github_url(url):
 def _github_source_to_raw_content_base_url(url):
     return "https://raw.githubusercontent.com/%s/%s/" % _parse_github_url(url)
 
+def _sanitize_path_fragment(path):
+    return path.replace("/", "_").replace(":", "_")
+
 def sharded_path(crate):
     # crates.io-index sharding rules (ASCII names)
     n = len(crate)
@@ -78,7 +81,7 @@ def start_github_downloads(
             in_flight_fetch = struct(
                 download_token = mctx.download(
                     url,
-                    url.replace("/", "_"),
+                    _sanitize_path_fragment(url),
                     allow_fail = True,
                     block = False,
                 ),
@@ -114,7 +117,7 @@ def start_crate_registry_downloads(
 
             state.in_flight_sparse_registry_configs_by_source[source] = mctx.download(
                 registry + "config.json",
-                source.replace("/", "_") + "config.json",
+                _sanitize_path_fragment(source) + "config.json",
                 headers = registry_auth_headers(cargo_credentials, source),
                 block = False,
             )
@@ -226,7 +229,7 @@ def download_metadata_for_git_crates(
         state,
         annotations):
     for url, fetch_state in state.in_flight_git_crate_fetches_by_url.items():
-        cargo_toml_path = url.replace("/", "_")
+        cargo_toml_path = _sanitize_path_fragment(url)
         _ensure_cargo_toml_exists(mctx.path(cargo_toml_path), fetch_state)
 
         cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
@@ -244,7 +247,7 @@ def download_metadata_for_git_crates(
                 package["strip_prefix"] = strip_prefix
                 child_url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
 
-                child_cargo_toml_path = child_url.replace("/", "_")
+                child_cargo_toml_path = _sanitize_path_fragment(child_url)
                 package["member_crate_cargo_toml_info"] = struct(
                     token = mctx.download(child_url, child_cargo_toml_path, block = False),
                     path = child_cargo_toml_path,
@@ -255,7 +258,7 @@ def download_metadata_for_git_crates(
                 package["cargo_toml_json"] = cargo_toml_json
 
     for source, clone_state in state.pending_git_clones_by_source.items():
-        clone_dir = mctx.path(source.replace("/", "_"))
+        clone_dir = mctx.path(_sanitize_path_fragment(source))
         git_repo(clone_state.clone_config, clone_dir)
 
         # TODO(zbarsky): multiple crates?
@@ -289,7 +292,7 @@ def download_sparse_registry_configs(mctx, state):
 
     for source, token in state.in_flight_sparse_registry_configs_by_source.items():
         token.wait()
-        dl = json.decode(mctx.read(source.replace("/", "_") + "config.json"))["dl"]
+        dl = json.decode(mctx.read(_sanitize_path_fragment(source) + "config.json"))["dl"]
 
         if not (
             "{crate}" in dl or
@@ -303,3 +306,4 @@ def download_sparse_registry_configs(mctx, state):
         sparse_registry_configs[source] = dl
 
     return sparse_registry_configs
+

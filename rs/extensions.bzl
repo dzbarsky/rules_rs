@@ -53,6 +53,9 @@ def _date(ctx, label):
     result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
     print(label, result.stdout)
 
+def _normalize_path(path):
+    return path.replace("\\", "/")
+
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
         dep = {"name": dep}
@@ -579,8 +582,7 @@ RESOLVED_PLATFORMS = select({{
 
     _date(mctx, "done")
 
-    # TODO(zbarsky): Is this correct for non-main repos? Will anyone care?
-    repo_root = str(mctx.path(Label("@@//:all"))).removesuffix("all")
+    repo_root = _normalize_path(cargo_metadata["workspace_root"])
 
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
@@ -591,7 +593,7 @@ RESOLVED_PLATFORMS = select({{
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
-                bazel_target = "//" + dep["path"].removeprefix(repo_root)
+                bazel_target = "//" + _normalize_path(dep["path"]).removeprefix(repo_root)
 
                 # TODO(zbarsky): check if we actually need this?
                 aliases[bazel_target] = dep["name"]
@@ -613,7 +615,7 @@ RESOLVED_PLATFORMS = select({{
             {build_deps}
         ],
     }},""".format(
-            bazel_package = repr(package["manifest_path"].removeprefix(repo_root).removesuffix("/Cargo.toml")),
+            bazel_package = repr(_normalize_path(package["manifest_path"]).removeprefix(repo_root).removesuffix("/Cargo.toml")),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
             deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
             build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
@@ -672,7 +674,6 @@ def _crate_impl(mctx):
 
     # And toml2json
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
-    repo_root = str(mctx.path(Label("@@//:all"))).removesuffix("all")
 
     downloader_state = new_downloader_state()
 
