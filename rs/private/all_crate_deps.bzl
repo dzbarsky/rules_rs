@@ -7,11 +7,16 @@ def all_crate_deps(
         proc_macro = False,
         #proc_macro_dev = False,
         build = False,
-        build_proc_macro = False):
+        build_proc_macro = False,
+        filter_prefix = None):
     to_return = []
 
     deps = dep_data["deps"]
     build_deps = dep_data["build_deps"]
+
+    if filter_prefix:
+        deps = [dep for dep in deps if dep.startswith(filter_prefix)]
+        build_deps = [dep for dep in build_deps if dep.startswith(filter_prefix)]
 
     if build_proc_macro:
         rust_deps(

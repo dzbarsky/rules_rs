@@ -558,7 +558,8 @@ def all_crate_deps(
         #proc_macro_dev = False,
         build = False,
         build_proc_macro = False,
-        package_name = None):
+        package_name = None,
+        cargo_only = False):
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
@@ -570,6 +571,7 @@ def all_crate_deps(
         proc_macro = proc_macro,
         build = build,
         build_proc_macro = build_proc_macro,
+        filter_prefix = {this_repo} if cargo_only else None,
     )
 
 RESOLVED_PLATFORMS = select({{
@@ -578,6 +580,7 @@ RESOLVED_PLATFORMS = select({{
 }})
 """.format(
             target_compatible_with = ",\n    ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
+            this_repo = repr("@" + hub_name + "//:"),
         )
 
     _date(mctx, "done")
