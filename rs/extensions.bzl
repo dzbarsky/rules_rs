@@ -731,10 +731,14 @@ def _crate_impl(mctx):
 
     facts = {}
     direct_deps = []
+    direct_dev_deps = []
 
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
-            direct_deps.append(cfg.name)
+            if mctx.is_dev_dependency(cfg):
+                direct_dev_deps.append(cfg.name)
+            else:
+                direct_dev_deps.append(cfg.name)
 
             hub_packages = packages_by_hub_name[cfg.name]
 
@@ -770,7 +774,7 @@ def _crate_impl(mctx):
 
     kwargs = dict(
         root_module_direct_deps = direct_deps,
-        root_module_direct_dev_deps = [],
+        root_module_direct_dev_deps = direct_dev_deps,
         reproducible = True,
     )
 
