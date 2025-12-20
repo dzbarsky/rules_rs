@@ -738,7 +738,7 @@ def _crate_impl(mctx):
             if mctx.is_dev_dependency(cfg):
                 direct_dev_deps.append(cfg.name)
             else:
-                direct_dev_deps.append(cfg.name)
+                direct_deps.append(cfg.name)
 
             hub_packages = packages_by_hub_name[cfg.name]
 
