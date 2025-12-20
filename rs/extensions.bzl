@@ -21,7 +21,7 @@ def _external_repo_for_git_source(remote, commit):
     return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
 
 def _platform(triple):
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
+    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
 
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}

@@ -2,7 +2,7 @@
 load(":semver.bzl", "parse_full_version")
 
 def _platform(triple):
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu")
+    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
 
 def _format_branches(branches):
     return """select({
