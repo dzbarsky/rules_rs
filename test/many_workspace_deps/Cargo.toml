@@ -7,6 +7,7 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4.11.0"
+apple-codesign = "0.27.0"
 axum = "0.8.4"
 bevy = "0.16.1"
 ballista = "48.0.0"
