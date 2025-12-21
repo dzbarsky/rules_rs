@@ -120,24 +120,26 @@ def _propagate_feature_enablement(
                 dep_name = feature[:idx]
                 dep_feature = feature[idx + 1:]
 
+                dep_optional = False
                 if dep_name[-1] == "?":
                     dep_name = dep_name[:-1]
-                else:
-                    # TODO(zbarsky): Technically this is not an enabled feature, but it's a way to get the dep enabled in the next loop iteration.
-                    if dep_name not in feature_set:
-                        package_changed = True
-                        feature_set.add(dep_name)
 
                 found = False
                 for dep in feature_resolutions.possible_deps:
                     if dep["name"] == dep_name:
                         found = True
+                        dep_optional = dep.get("optional", False)
                         dep_feature_resolutions = dep["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
                         if dep_feature not in triple_features:
                             triple_features.add(dep_feature)
                             dirty_package_indices.add(dep_feature_resolutions.package_index)
                         break
+
+                # Only optional deps need to be explicitly enabled when a subfeature is toggled.
+                if dep_optional and dep_name not in feature_set:
+                    package_changed = True
+                    feature_set.add(dep_name)
 
                 if not found and debug:
                     print("Skipping enabling subfeature", feature, "for", package["name"], "@", package["version"], "it's not a dep...")

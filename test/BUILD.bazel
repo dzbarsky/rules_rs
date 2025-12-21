@@ -1,13 +1,18 @@
 DISABLED = [
     "annotation_crate_features",
+    #"binaries",
     #"build_script_aliases",
+    #"build_script_env_select",
     #"build_script_runtime_env",
     #"build_dep_features",
     #"feature_name_overrides_implicit_dep",
     #"many_workspace_deps",
     #"multiple_versions_for_dependency",
+    #"non_optional_dep_feature",
+    #"optional_build_deps",
     #"platform_dep_features",
     #"git_crates",
+    #"uv",
 ]
 
 TESTS = [f for f in glob(

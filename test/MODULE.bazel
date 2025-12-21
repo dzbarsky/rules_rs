@@ -63,6 +63,7 @@ TESTS = [
     # Got count 45796 in 20 rounds
     "many_workspace_deps",
     "multiple_versions_for_dependency",
+    "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
     "binaries",
