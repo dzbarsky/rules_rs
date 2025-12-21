@@ -29,6 +29,7 @@ def _crate_git_repository_implementation(rctx):
         "worktree",
         "add",
         str(dest_dir),
+        "--force",
         "--detach",
         "HEAD"
     ])
