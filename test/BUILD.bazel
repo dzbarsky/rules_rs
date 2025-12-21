@@ -8,6 +8,7 @@ DISABLED = [
     #"feature_name_overrides_implicit_dep",
     #"many_workspace_deps",
     #"multiple_versions_for_dependency",
+    #"multiple_versions_of_optional_dep",
     #"non_optional_dep_feature",
     #"optional_build_deps",
     #"platform_dep_features",

@@ -60,9 +60,9 @@ TESTS = [
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
     "git_crates",
-    # Got count 45796 in 20 rounds
-    "many_workspace_deps",
+    "many_workspace_deps", # Got count 45796 in 20 rounds
     "multiple_versions_for_dependency",
+    "multiple_versions_of_optional_dep",
     "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
