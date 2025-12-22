@@ -11,6 +11,8 @@ def _cfg_parser_smoke_test_impl(ctx):
     linux_gnu = "x86_64-unknown-linux-gnu"
     linux_musl = "aarch64-unknown-linux-musl"
     win = "x86_64-pc-windows-msvc"
+    win_gnu = "x86_64-pc-windows-gnu"
+    win_gnullvm = "aarch64-pc-windows-gnullvm"
 
     # MacOS facts facts
     asserts.true(env, cfg_matches(_cfg("unix"), mac))
@@ -32,6 +34,8 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_env = "msvc"'), win))
     asserts.true(env, cfg_matches(_cfg('target_family = "windows"'), win))
     asserts.true(env, cfg_matches(_cfg('target_pointer_width = "64"'), win))
+    asserts.true(env, cfg_matches(_cfg('target_env = "gnu"'), win_gnu))
+    asserts.true(env, cfg_matches(_cfg('target_env = "gnullvm"'), win_gnullvm))
 
     # Combinators
     asserts.false(env, cfg_matches(_cfg("any()"), mac))
@@ -45,7 +49,7 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg("all(true)"), mac))
     asserts.false(env, cfg_matches(_cfg("all(true, false)"), mac))
 
-    triples = [mac, linux_gnu, linux_musl, win]
+    triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm]
 
     results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
     asserts.equals(env, results, [linux_gnu, linux_musl])
@@ -54,6 +58,13 @@ def _cfg_parser_smoke_test_impl(ctx):
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
         triples)
     asserts.equals(env, results, triples)
+
+    # Cargo dependencies can target a specific triple instead of a cfg expression.
+    results = cfg_matches_expr_for_triples(win_gnullvm, triples)
+    asserts.equals(env, results, [win_gnullvm])
+
+    results = cfg_matches_expr_for_triples(_cfg('all(target_os = "windows", any(target_env = "msvc", target_env = "gnu", target_env = "gnullvm"))'), triples)
+    asserts.equals(env, results, [win, win_gnu, win_gnullvm])
 
     return unittest.end(env)
 

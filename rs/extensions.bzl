@@ -400,7 +400,6 @@ def _generate_hub_and_spokes(
             for triple in platform_triples:
                 if prefixed_dep_alias in features_enabled[triple]:
                     fail("Crate %s has enabled %s but it was not in the lockfile..." % (package["name"], prefixed_dep_alias))
-                    continue
 
     mctx.report_progress("Initializing spokes")
 

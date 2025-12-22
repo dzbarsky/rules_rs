@@ -15,13 +15,8 @@ register_toolchains(
     "@toolchains_llvm_bootstrapped//toolchain:all",
 )
 
-bazel_dep(name = "rules_cc", version = "0.2.14")
-bazel_dep(name = "rules_rust", version = "0.67.0")
-single_version_override(
-    module_name = "rules_rust",
-    patch_strip = 1,
-    patches = ["//:rules_rust_ar.patch"],
-)
+bazel_dep(name = "rules_cc", version = "0.2.16")
+bazel_dep(name = "rules_rust", version = "0.68.1")
 
 #local_path_override(
 #    module_name = "rules_rust",

@@ -309,7 +309,10 @@ def cfg_matches_expr_for_triples(expr, triples, features=[], target_features=[])
     return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features, target_features)
 
 def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[], target_features=[]):
-    return cfg_matches_ast_for_triples(cfg_parse(expr), cfg_attrs)
+    if expr.startswith("cfg("):
+        return cfg_matches_ast_for_triples(cfg_parse(expr), cfg_attrs)
+    # Cargo target table keys that aren't cfg(...) are literal triples.
+    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_attr["_triple"] == expr]
 
 def cfg_matches_ast_for_triples(ast, cfg_attrs):
     return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr)]
