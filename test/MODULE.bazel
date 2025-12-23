@@ -18,6 +18,8 @@ register_toolchains(
     "@toolchains_llvm_bootstrapped//toolchain:all",
 )
 
+bazel_dep(name = "rules_python", version = "1.7.0")
+
 bazel_dep(name = "bazel_lib", version = "3.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.16")
 bazel_dep(name = "rules_rust", version = "0.68.1")
@@ -160,6 +162,18 @@ crate.annotation(
     crate = "glib-sys",
     gen_build_script = "off",
     deps = ["@glib//glib"],
+)
+
+crate.annotation(
+    crate = "gobject-sys",
+    gen_build_script = "off",
+    deps = ["@glib//gobject"],
+)
+
+crate.annotation(
+    crate = "gio-sys",
+    gen_build_script = "off",
+    deps = ["@glib//gio"],
 )
 
 inject_repo(crate, "glib")
