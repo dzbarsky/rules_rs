@@ -66,6 +66,8 @@ def _spec_to_dep_dict_inner(dep, spec, is_build = False):
             "default_features": spec.get("default_features", spec.get("default-features", True)),
             "features": spec.get("features", []),
         }
+        if "package" in spec:
+            dep["package"] = spec["package"]
 
     if is_build:
         dep["kind"] = "build"
@@ -95,6 +97,9 @@ Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
 
         if spec.get("optional"):
             inherited["optional"] = True
+
+        if spec.get("package"):
+            inherited["package"] = spec["package"]
 
         return inherited
     return _spec_to_dep_dict_inner(dep, spec, is_build)
