@@ -134,7 +134,7 @@ crate.annotation(
 # Fix readme inclusions
 crate.annotation(
     crate = "windows-link",
-    patch_args = ["-p0"],
+    patch_args = ["-p1"],
     patches = ["//:windows-link.patch"],
 )
 crate.annotation(
