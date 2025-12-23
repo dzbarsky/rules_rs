@@ -4,7 +4,7 @@ load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository")
-load("//rs/private:default_annotation.bzl", "DEFAULT_CRATE_ANNOTATION")
+load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:resolver.bzl", "resolve")
@@ -221,7 +221,7 @@ def _generate_hub_and_spokes(
                 facts[key] = fact
                 fact = json.decode(fact)
             else:
-                annotation = annotations.get(name, DEFAULT_CRATE_ANNOTATION)
+                annotation = annotation_for(annotations, name, package["version"])
                 info = package.get("member_crate_cargo_toml_info")
                 if info:
                     # TODO(zbarsky): These tokens got enqueues last, so this can bottleneck
@@ -380,9 +380,16 @@ def _generate_hub_and_spokes(
                 feature_resolutions.features_enabled[triple].update(features)
 
     # Set initial set of features from annotations
-    for crate, annotation in annotations.items():
-        if annotation.crate_features:
-            for version in versions_by_name.get(crate, []):
+    for crate, annotation_versions in annotations.items():
+        for version_key, annotation in annotation_versions.items():
+            target_versions = versions_by_name.get(crate, [])
+            if version_key != "*":
+                if version_key not in target_versions:
+                    continue
+                target_versions = [version_key]
+            if not annotation.crate_features:
+                continue
+            for version in target_versions:
                 features_enabled = feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled
                 for triple in platform_triples:
                     features_enabled[triple].update(annotation.crate_features)
@@ -417,7 +424,7 @@ def _generate_hub_and_spokes(
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
-        annotation = annotations.get(crate_name, DEFAULT_CRATE_ANNOTATION)
+        annotation = annotation_for(annotations, crate_name, version)
 
         kwargs = dict(
             hub_name = hub_name,
@@ -430,6 +437,8 @@ def _generate_hub_and_spokes(
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
+            build_script_tools = annotation.build_script_tools,
+            build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
             rustc_flags = annotation.rustc_flags,
             data = annotation.data,
@@ -495,7 +504,7 @@ def _generate_hub_and_spokes(
 
     hub_contents = []
     for name, versions in versions_by_name.items():
-        binaries = annotations.get(name, DEFAULT_CRATE_ANNOTATION).gen_binaries
+        binaries = annotation_for(annotations, name, version).gen_binaries
 
         for version in versions:
             spoke_repo = _spoke_repo(hub_name, name, version)
@@ -691,12 +700,7 @@ def _crate_impl(mctx):
             fail("`.from_cargo` is required. Please update %s" % mod.name)
 
         for cfg in mod.tags.from_cargo:
-            annotations = {
-                annotation.crate: annotation
-                for annotation in mod.tags.annotation
-                if cfg.name in (annotation.repositories or [cfg.name])
-            }
-
+            annotations = build_annotation_map(mod, cfg.name)
             mctx.watch(cfg.cargo_lock)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock["package"]
@@ -708,11 +712,7 @@ def _crate_impl(mctx):
 
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
-            annotations = {
-                annotation.crate: annotation
-                for annotation in mod.tags.annotation
-                if cfg.name in (annotation.repositories or [cfg.name])
-            }
+            annotations = build_annotation_map(mod, cfg.name)
 
             if cfg.use_home_cargo_credentials:
                 if not cfg.cargo_config:
@@ -746,11 +746,7 @@ def _crate_impl(mctx):
 
             hub_packages = packages_by_hub_name[cfg.name]
 
-            annotations = {
-                annotation.crate: annotation
-                for annotation in mod.tags.annotation
-                if cfg.name in (annotation.repositories or [cfg.name])
-            }
+            annotations = build_annotation_map(mod, cfg.name)
 
             if cfg.debug:
                 for _ in range(25):
@@ -821,14 +817,14 @@ _annotation = tag_class(
             doc = "The name of the crate the annotation is applied to",
             mandatory = True,
         ),
+        "version": attr.string(
+            doc = "The version of the crate the annotation is applied to. Defaults to all versions.",
+            default = "*",
+        ),
         "repositories": attr.string_list(
             doc = "A list of repository names specified from `crate.from_cargo(name=...)` that this annotation is applied to. Defaults to all repositories.",
             default = [],
         ),
-        # "version": attr.string(
-        #     doc = "The versions of the crate the annotation is applied to. Defaults to all versions.",
-        #     default = "*",
-        # ),
     } | {
         "additive_build_file": attr.label(
             doc = "A file containing extra contents to write to the bottom of generated BUILD files.",
@@ -872,9 +868,12 @@ _annotation = tag_class(
         "build_script_toolchains": attr.label_list(
             doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
         ),
-        # "build_script_tools": _relative_label_list(
-        # doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
-        # ),
+        "build_script_tools": _relative_label_list(
+            doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
+        ),
+        "build_script_tools_select": attr.string_list_dict(
+            doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute. Keys should be the platform triplet. Value should be a list of labels.",
+        ),
         # "compile_data": _relative_label_list(
         # doc = "A list of labels to add to a crate's `rust_library::compile_data` attribute.",
         # ),

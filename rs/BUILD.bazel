@@ -10,7 +10,7 @@ bzl_library(
         "//rs/private:cfg_parser",
         "//rs/private:crate_git_repository",
         "//rs/private:crate_repository",
-        "//rs/private:default_annotation",
+        "//rs/private:annotations",
         "//rs/private:downloader",
         "//rs/private:git_repository",
         "//rs/private:resolver",

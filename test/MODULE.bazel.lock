@@ -93,6 +93,8 @@
     "https://bcr.bazel.build/modules/libpfm/4.11.0/MODULE.bazel": "45061ff025b301940f1e30d2c16bea596c25b176c8b6b3087e92615adbd52902",
     "https://bcr.bazel.build/modules/libunwind/1.8.1/MODULE.bazel": "d9b947b15135786aed51671c22872a93e2637c74caa20e94f2061fd3b1efd6c3",
     "https://bcr.bazel.build/modules/libunwind/1.8.1/source.json": "2b4e58e2fa6ed7204862ab1a4e5978e4107340884c3217596ff7910b8dfae919",
+    "https://bcr.bazel.build/modules/nasm/2.16.03.bcr.2/MODULE.bazel": "e2d9297bf5825453d9172b9e96490f5a36c2eeb6e2340e31c058346fc2c60675",
+    "https://bcr.bazel.build/modules/nasm/2.16.03.bcr.2/source.json": "f9dca6f929af61202deaa37a70e48859e4c02b13b960b5c968a2a5fc274c584d",
     "https://bcr.bazel.build/modules/nlohmann_json/3.6.1/MODULE.bazel": "6f7b417dcc794d9add9e556673ad25cb3ba835224290f4f848f8e2db1e1fca74",
     "https://bcr.bazel.build/modules/nlohmann_json/3.6.1/source.json": "f448c6e8963fdfa7eb831457df83ad63d3d6355018f6574fb017e8169deb43a9",
     "https://bcr.bazel.build/modules/openssl/3.5.4.bcr.0/MODULE.bazel": "0f6b8f20b192b9ff0781406256150bcd46f19e66d807dcb0c540548439d6fc35",

@@ -1,0 +1,17 @@
+diff --git a/nasmlib/realpath.c b/nasmlib/realpath.c
+--- a/nasmlib/realpath.c
++++ b/nasmlib/realpath.c
+@@ -42,6 +42,12 @@
+ # include <sys/param.h>
+ #endif
+ 
+ #include "nasmlib.h"
++
++/* canonicalize_file_name is glibc-only; on musl it is absent even though
++ * config_linux.h sets HAVE_CANONICALIZE_FILE_NAME. Fall back to realpath. */
++#if defined(HAVE_CANONICALIZE_FILE_NAME) && !defined(__GLIBC__)
++#undef HAVE_CANONICALIZE_FILE_NAME
++#endif
+ 
+ #ifdef HAVE_CANONICALIZE_FILE_NAME
+ 

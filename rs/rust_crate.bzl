@@ -21,6 +21,7 @@ def rust_crate(
         build_deps,
         build_script_env,
         build_script_toolchains,
+        build_script_tools,
         is_proc_macro,
         binaries):
 
@@ -84,6 +85,7 @@ def rust_crate(
             build_script_env = build_script_env,
             build_script_env_files = ["cargo_toml_env_vars.env"],
             toolchains = build_script_toolchains,
+            tools = build_script_tools,
             proc_macro_deps = [name + "_build_script_proc_macro_deps"],
             edition = edition,
             pkg_name = crate_name,

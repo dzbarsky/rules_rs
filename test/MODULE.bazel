@@ -1,5 +1,4 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
 archive_override(
     module_name = "toolchains_llvm_bootstrapped",
@@ -22,6 +21,13 @@ register_toolchains(
 bazel_dep(name = "bazel_lib", version = "3.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.16")
 bazel_dep(name = "rules_rust", version = "0.68.1")
+bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
+single_version_override(
+    module_name = "nasm",
+    patch_strip = 1,
+    patches = ["//:nasm-musl.patch"],
+)
+
 single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
@@ -72,7 +78,7 @@ TESTS = [
     "build_dep_features",
     "feature_name_overrides_implicit_dep",
     "git_crates",
-    "many_workspace_deps", # Got count 45796 in 20 rounds
+    "many_workspace_deps",  # Got count 45796 in 20 rounds
     "multiple_versions_for_dependency",
     "multiple_versions_of_optional_dep",
     "non_optional_dep_feature",
@@ -126,10 +132,9 @@ crate.annotation(
 # Fix readme inclusions
 crate.annotation(
     crate = "windows-link",
-    patch_args = ["-p1"],
+    patch_args = ["-p0"],
     patches = ["//:windows-link.patch"],
 )
-
 crate.annotation(
     crate = "windows-version",
     patch_args = ["-p1"],
@@ -148,27 +153,30 @@ crate.annotation(
     ]
 ]
 
-
 ### Fix -sys crates
 bazel_dep(name = "glib", version = "2.82.2.bcr.6")
+
 crate.annotation(
     crate = "glib-sys",
     gen_build_script = "off",
     deps = ["@glib//glib"],
 )
+
 inject_repo(crate, "glib")
 
 bazel_dep(name = "alsa_lib", version = "1.2.9.bcr.4")
+
 crate.annotation(
     crate = "alsa-sys",
     gen_build_script = "off",
     deps = ["@alsa_lib"],
 )
+
 inject_repo(crate, "alsa_lib")
 
 bazel_dep(name = "openssl", version = "3.5.4.bcr.0")
+
 crate.annotation(
-    crate = "openssl-sys",
     build_script_data = [
         "@openssl//:gen_dir",
     ],
@@ -177,26 +185,39 @@ crate.annotation(
         "OPENSSL_NO_VENDOR": "1",
         "OPENSSL_STATIC": "1",
     },
+    crate = "openssl-sys",
     data = ["@openssl//:gen_dir"],
 )
+
 inject_repo(crate, "openssl")
 
 crate.annotation(
-    crate = "aws-lc-sys",
     build_script_env = {
         "AWS_LC_SYS_CFLAGS": "-fuse-ld=lld -Wno-unused-command-line-argument",
     },
+    crate = "aws-lc-sys",
 )
 
 bazel_dep(name = "jemalloc", version = "5.3.0-bcr.alpha.4")
+
 crate.annotation(
     crate = "tikv-jemalloc-sys",
     gen_build_script = "off",
     deps = ["@jemalloc"],
-    #build_script_data = ["@openai//:jemalloc_lib"],
-    #build_script_env = {
-    #    "JEMALLOC_OVERRIDE": "$(location @openai//:jemalloc_lib)",
-    #},
 )
+
 inject_repo(crate, "jemalloc")
 
+crate.annotation(
+    build_script_env = {
+        "NASM": "$(execpath @nasm//:nasm)",
+    },
+    build_script_tools = ["@nasm//:nasm"],
+    crate = "rav1e",
+    patch_args = ["-p1"],
+    patch_tool = "patch",
+    patches = ["//:rav1e-nasm-0.8.1.patch"],
+    version = "0.8.1",
+)
+
+inject_repo(crate, "nasm")

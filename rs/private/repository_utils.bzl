@@ -141,6 +141,7 @@ rust_crate(
     ]{conditional_build_deps},
     build_script_env = {build_script_env}{conditional_build_script_env},
     build_script_toolchains = {build_script_toolchains},
+    build_script_tools = {build_script_tools}{conditional_build_script_tools},
     is_proc_macro = {is_proc_macro},
     binaries = {binaries},
 )
@@ -157,6 +158,7 @@ rust_crate(
     )
     build_deps, conditional_build_deps = _select(attr.build_script_deps, attr.build_script_deps_select)
     build_script_data, conditional_build_script_data = _select(attr.build_script_data, attr.build_script_data_select)
+    build_script_tools, conditional_build_script_tools = _select(attr.build_script_tools, attr.build_script_tools_select)
     deps, conditional_deps = _select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
 
     conditional_build_script_env = _select_build_script_env(attr.build_script_env_select)
@@ -186,6 +188,8 @@ rust_crate(
         build_script_env = repr(attr.build_script_env),
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
+        build_script_tools = repr([str(t) for t in build_script_tools]),
+        conditional_build_script_tools = " + " + conditional_build_script_tools if conditional_build_script_tools else "",
         is_proc_macro = repr(is_proc_macro),
         binaries = binaries,
     )
@@ -202,6 +206,8 @@ common_attrs = {
     "build_script_env": attr.string_dict(),
     "build_script_env_select": attr.string_dict(),
     "build_script_toolchains": attr.label_list(),
+    "build_script_tools": attr.label_list(default = []),
+    "build_script_tools_select": attr.string_list_dict(),
     "rustc_flags": attr.string_list(),
     "data": attr.label_list(default = []),
     "deps": attr.string_list(default = []),

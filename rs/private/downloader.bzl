@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load(":cargo_credentials.bzl", "registry_auth_headers")
-load(":default_annotation.bzl", "DEFAULT_CRATE_ANNOTATION")
+load(":annotations.bzl", "annotation_for")
 load(":toml2json.bzl", "run_toml2json")
 
 CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
@@ -72,7 +72,7 @@ def start_github_downloads(
         if key in existing_facts:
             continue
 
-        annotation = annotations.get(name, DEFAULT_CRATE_ANNOTATION)
+        annotation = annotation_for(annotations, name, package["version"])
         url = _github_source_to_raw_content_base_url(source) + annotation.workspace_cargo_toml
         in_flight_fetch = state.in_flight_git_crate_fetches_by_url.get(url)
         if in_flight_fetch:
@@ -238,7 +238,7 @@ def download_metadata_for_git_crates(
             name = package["name"]
 
             if cargo_toml_json.get("package", {}).get("name") != name:
-                annotation = annotations.get(name, DEFAULT_CRATE_ANNOTATION)
+                annotation = annotation_for(annotations, name, package["version"])
                 strip_prefix = _compute_strip_prefix(annotation, cargo_toml_json, name)
 
                 if not strip_prefix:
@@ -262,7 +262,8 @@ def download_metadata_for_git_crates(
         git_repo(clone_state.clone_config, clone_dir)
 
         # TODO(zbarsky): multiple crates?
-        annotation = annotations.get(clone_state.packages[0]["name"], DEFAULT_CRATE_ANNOTATION)
+        first_pkg = clone_state.packages[0]
+        annotation = annotation_for(annotations, first_pkg["name"], first_pkg["version"])
         cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
         _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
         cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
@@ -271,7 +272,7 @@ def download_metadata_for_git_crates(
             name = package["name"]
 
             if cargo_toml_json.get("package", {}).get("name") != name:
-                annotation = annotations.get(name, DEFAULT_CRATE_ANNOTATION)
+                annotation = annotation_for(annotations, name, package["version"])
                 strip_prefix = _compute_strip_prefix(annotation, cargo_toml_json, name)
 
                 if not strip_prefix:
@@ -306,4 +307,3 @@ def download_sparse_registry_configs(mctx, state):
         sparse_registry_configs[source] = dl
 
     return sparse_registry_configs
-
