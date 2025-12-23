@@ -235,3 +235,9 @@ crate.annotation(
 )
 
 inject_repo(crate, "nasm")
+
+crate.annotation(
+    crate = "gemm-common",
+    patch_args = ["-p1"],
+    patches = ["//:gemm-common-fp16.patch"],
+)
