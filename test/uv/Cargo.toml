@@ -6,4 +6,4 @@ edition = "2024"
 [lib]
 
 [dependencies]
-uv = { git = "https://github.com/astral-sh/uv", rev = "a9ab39ad6fbfb7b4925cc360fa4786f0ec9128bb" }
+uv = { git = "https://github.com/astral-sh/uv", rev = "de868ed1489991465ee4d4d09f81d74090f716fe" }

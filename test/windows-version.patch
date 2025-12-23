@@ -1,0 +1,11 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 2d5a2a2..6e8c4cd 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,5 +1,5 @@
+-#![doc = include_str!("../readme.md")]
++#![doc = "windows-version"]
+ #![cfg(windows)]
+ #![cfg_attr(not(test), no_std)]
+ #![allow(non_snake_case, clippy::upper_case_acronyms)]
+ 

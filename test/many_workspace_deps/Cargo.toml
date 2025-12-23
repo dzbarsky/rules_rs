@@ -7,10 +7,10 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4.11.0"
-apple-codesign = "0.27.0"
+#apple-codesign = "0.27.0"
 axum = "0.8.4"
-bevy = "0.16.1"
-ballista = "48.0.0"
+#bevy = "0.16.1"
+#ballista = "48.0.0"
 bindgen = "0.72.1"
 candle-core = "0.9.1"
 cssparser = "0.35.0"

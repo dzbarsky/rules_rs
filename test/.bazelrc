@@ -4,7 +4,9 @@ common --repo_contents_cache=~/bazel_repo_contents_cache
 common --disk_cache=~/bazel_cache
 common --incompatible_disallow_empty_glob=False
 
+common --@rules_cc//cc/toolchains/args/archiver_flags:use_libtool_on_macos=False
 common --@toolchains_llvm_bootstrapped//config:experimental_stub_libgcc_s
 
-common:rbe --extra_execution_platforms=//:rbe
-common:rbe --remote_executor=grpcs://remote.buildbuddy.io
+common --noexperimental_throttle_remote_action_building
+common:remote --extra_execution_platforms=//:rbe
+common:remote --remote_executor=grpcs://remote.buildbuddy.io
