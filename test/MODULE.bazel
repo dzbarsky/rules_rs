@@ -2,8 +2,8 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
 archive_override(
     module_name = "toolchains_llvm_bootstrapped",
-    #patch_strip = 1,
-    #patches = ["//:toolchains_llvm_bootstrapped.patch"],
+    patch_strip = 1,
+    patches = ["//:toolchains_llvm_bootstrapped_dllcrt.patch"],
     integrity = "sha256-yRDgDshs4PesvkmzSCwNutJjObeF00870DNoJ+WtJhQ=",
     strip_prefix = "toolchains_llvm_bootstrapped-120bb9689efe19cedadec5deb7c45508ad8df4d4",
     urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/120bb9689efe19cedadec5deb7c45508ad8df4d4/master.tar.gz"],
