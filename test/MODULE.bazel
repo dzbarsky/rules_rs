@@ -2,11 +2,13 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
 archive_override(
     module_name = "toolchains_llvm_bootstrapped",
+    integrity = "sha256-dBvq3EBkK0YWeYLZz+lPGT1EP5jKdpvZ7VJ6iy//ADM=",
     patch_strip = 1,
-    patches = ["//:toolchains_llvm_bootstrapped_dllcrt.patch"],
-    integrity = "sha256-yRDgDshs4PesvkmzSCwNutJjObeF00870DNoJ+WtJhQ=",
-    strip_prefix = "toolchains_llvm_bootstrapped-120bb9689efe19cedadec5deb7c45508ad8df4d4",
-    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/120bb9689efe19cedadec5deb7c45508ad8df4d4/master.tar.gz"],
+    patches = [
+        "//:toolchains_llvm_bootstrapped_ws2.patch",
+    ],
+    strip_prefix = "toolchains_llvm_bootstrapped-ae1f72282fbe8695c5641eda171d6b7b73e475b6",
+    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/ae1f72282fbe8695c5641eda171d6b7b73e475b6/master.tar.gz"],
 )
 
 #local_path_override(
