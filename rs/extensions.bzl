@@ -334,6 +334,27 @@ def _generate_hub_and_spokes(
 
     workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
+    # Validate that Cargo.lock satisfies Cargo.toml requirements
+    for package in cargo_metadata["packages"]:
+        fq_deps = workspace_fq_deps.get(package["name"], {})
+        for dep in package["dependencies"]:
+            source = dep.get("source")
+            if not source or not source.startswith("registry+"):
+                # Skip path deps and git deps
+                continue
+
+            dep_name = dep["name"]
+            req = dep.get("req")
+            fq = fq_deps.get(dep_name)
+            if not req or not fq:
+                continue
+
+            locked_version = fq[len(dep_name) + 1:]
+            if not select_matching_version(req, [locked_version]):
+                fail("Cargo.lock out of sync: %s requires %s %s but Cargo.lock has %s." % (
+                    package["name"], dep_name, req, locked_version
+                ))
+
     workspace_dep_versions_by_name = {}
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
@@ -702,6 +723,7 @@ def _crate_impl(mctx):
         for cfg in mod.tags.from_cargo:
             annotations = build_annotation_map(mod, cfg.name)
             mctx.watch(cfg.cargo_lock)
+            mctx.watch(cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock["package"]
             packages_by_hub_name[cfg.name] = parsed_packages
