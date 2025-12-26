@@ -25,6 +25,7 @@ crate.from_cargo(
         "x86_64-apple-darwin",
         "x86_64-unknown-linux-gnu",
     ],
+    validate_lockfile = True,
 )
 
 crate.annotation(
