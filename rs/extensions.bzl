@@ -116,6 +116,7 @@ def _generate_hub_and_spokes(
         cargo_credentials,
         cargo_config,
         debug,
+        validate_lockfile,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -335,25 +336,26 @@ def _generate_hub_and_spokes(
     workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
     # Validate that Cargo.lock satisfies Cargo.toml requirements
-    for package in cargo_metadata["packages"]:
-        fq_deps = workspace_fq_deps.get(package["name"], {})
-        for dep in package["dependencies"]:
-            source = dep.get("source")
-            if not source or not source.startswith("registry+"):
-                # Skip path deps and git deps
-                continue
+    if validate_lockfile:
+        for package in cargo_metadata["packages"]:
+            fq_deps = workspace_fq_deps.get(package["name"], {})
+            for dep in package["dependencies"]:
+                source = dep.get("source")
+                if not source or not source.startswith("registry+"):
+                    # Skip path deps and git deps
+                    continue
 
-            dep_name = dep["name"]
-            req = dep.get("req")
-            fq = fq_deps.get(dep_name)
-            if not req or not fq:
-                continue
+                dep_name = dep["name"]
+                req = dep.get("req")
+                fq = fq_deps.get(dep_name)
+                if not req or not fq:
+                    continue
 
-            locked_version = fq[len(dep_name) + 1:]
-            if not select_matching_version(req, [locked_version]):
-                fail("Cargo.lock out of sync: %s requires %s %s but Cargo.lock has %s." % (
-                    package["name"], dep_name, req, locked_version
-                ))
+                locked_version = fq[len(dep_name) + 1:]
+                if not select_matching_version(req, [locked_version]):
+                    fail("Cargo.lock out of sync: %s requires %s %s but Cargo.lock has %s." % (
+                        package["name"], dep_name, req, locked_version
+                    ))
 
     workspace_dep_versions_by_name = {}
 
@@ -772,9 +774,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, cfg.validate_lockfile, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, cfg.validate_lockfile)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
@@ -827,6 +829,10 @@ _from_cargo = tag_class(
             doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build.",
         ),
         "debug": attr.bool(),
+        "validate_lockfile": attr.bool(
+            doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",
+            default = False,
+        ),
     },
 )
 
