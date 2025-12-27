@@ -1,0 +1,110 @@
+--- a/build.rs
++++ b/build.rs
+@@ -220,6 +220,7 @@
+     ("x86_64", None, Some("elf")),
+     ("aarch64", Some("ios"), Some("ios64")),
+     ("aarch64", Some("macos"), Some("ios64")),
++    ("aarch64", Some(WINDOWS), Some("win64")),
+     ("aarch64", None, Some("linux64")),
+     ("x86", Some(WINDOWS), Some("win32n")),
+     ("x86", Some("ios"), Some("macosx")),
+@@ -357,8 +358,10 @@
+         })
+         .unwrap();
+ 
+-    let use_pregenerated = !target.is_git;
++    let use_pregenerated = !target.is_git && !(target.os == WINDOWS && target.arch == AARCH64);
+     let warnings_are_errors = target.is_git;
++
++    let asm_os = Some(target.os.as_str());
+ 
+     let asm_dir = if use_pregenerated {
+         &pregenerated
+@@ -368,7 +371,7 @@
+ 
+     let asm_srcs = if let Some(perlasm_format) = perlasm_format {
+         let perlasm_src_dsts =
+-            perlasm_src_dsts(asm_dir, &target.arch, Some(&target.os), perlasm_format);
++            perlasm_src_dsts(asm_dir, &target.arch, asm_os, perlasm_format);
+ 
+         if !use_pregenerated {
+             perlasm(
+@@ -384,7 +387,7 @@
+         // For Windows we also pregenerate the object files for non-Git builds so
+         // the user doesn't need to install the assembler. On other platforms we
+         // assume the C compiler also assembles.
+-        if use_pregenerated && target.os == WINDOWS {
++        if use_pregenerated && target.os == WINDOWS && (target.arch == X86 || target.arch == X86_64) {
+             // The pregenerated object files always use ".obj" as the extension,
+             // even when the C/C++ compiler outputs files with the ".o" extension.
+             asm_srcs = asm_srcs
+@@ -503,6 +506,9 @@
+         let mut out_path = out_dir.join(p.file_name().unwrap());
+         assert!(out_path.set_extension(target.obj_ext));
+         if need_run(&p, &out_path, includes_modified) {
++            if target.os == WINDOWS && target.arch == AARCH64 && ext == "S" {
++                sanitize_asm(p);
++            }
+             let cmd = if target.os != WINDOWS || ext != "asm" {
+                 cc(p, ext, target, warnings_are_errors, &out_path)
+             } else {
+@@ -513,6 +519,18 @@
+         }
+         out_path.to_str().expect("Invalid path").into()
+     }
++}
++
++fn sanitize_asm(path: &Path) {
++    let contents = std::fs::read_to_string(path)
++        .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", path, e));
++    let filtered = contents
++        .lines()
++        .filter(|line| !line.trim_start().starts_with(".hidden"))
++        .collect::<Vec<_>>()
++        .join("\n");
++    std::fs::write(path, filtered)
++        .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", path, e));
+ }
+ 
+ fn obj_path(out_dir: &Path, src: &Path, obj_ext: &str) -> PathBuf {
+@@ -532,6 +550,9 @@
+ 
+     let mut c = cc::Build::new();
+     let _ = c.include("include");
++    if target.arch == "aarch64" && target.os == WINDOWS {
++        let _ = c.flag("-march=armv8-a+crypto");
++    }
+     match ext {
+         "c" => {
+             for f in c_flags(target) {
+@@ -674,6 +695,7 @@
+     let srcs = sources_for_arch(arch);
+     let mut src_dsts = srcs
+         .iter()
++        .filter(|p| p.exists())
+         .filter(|p| is_perlasm(p))
+         .map(|src| (src.clone(), asm_path(out_dir, src, os, perlasm_format)))
+         .collect::<Vec<_>>();
+@@ -714,7 +736,11 @@
+     let src_stem = src.file_stem().expect("source file without basename");
+ 
+     let dst_stem = src_stem.to_str().unwrap();
+-    let dst_extension = if os == Some("windows") { "asm" } else { "S" };
++    let dst_extension = if perlasm_format == "win32n" || perlasm_format == "nasm" {
++        "asm"
++    } else {
++        "S"
++    };
+     let dst_filename = format!("{}-{}.{}", dst_stem, perlasm_format, dst_extension);
+     out_dir.join(dst_filename)
+ }
+@@ -726,6 +752,9 @@
+     includes_modified: Option<SystemTime>,
+ ) {
+     for (src, dst) in src_dst {
++        if !src.exists() {
++            continue;
++        }
+         if let Some(includes_modified) = includes_modified {
+             if !need_run(src, dst, includes_modified) {
+                 continue;

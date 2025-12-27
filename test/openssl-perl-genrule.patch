@@ -1,6 +1,6 @@
-diff -ruN a/BUILD.bazel b/BUILD.bazel
---- a/BUILD.bazel	2025-12-23 19:19:10
-+++ b/BUILD.bazel	2025-12-23 19:22:56
+diff -ruN openssl-overlay-orig/BUILD.bazel openssl-overlay-mod/BUILD.bazel
+--- openssl-overlay-orig/BUILD.bazel	2025-12-27 04:22:23
++++ openssl-overlay-mod/BUILD.bazel	2025-12-27 04:23:11
 @@ -98,7 +98,7 @@
      _WINDOWS_X86_64_OPENSSL_DEFINES = "OPENSSL_DEFINES",
      _WINDOWS_X86_64_PERLASM_GEN = "PERLASM_GEN",
@@ -25,7 +25,28 @@ diff -ruN a/BUILD.bazel b/BUILD.bazel
  ]
  
  COMMON_OPENSSL_WINDOWS_DEFINES = [
-@@ -338,6 +338,7 @@
+@@ -294,14 +294,18 @@
+ 
+ perl_genrule(
+     name = "perlasm_genfiles",
+-    additional_srcs = PERLASM_TOOLS + ["crypto/ec/ecp_nistz256_table.c"],
++    additional_srcs = PERLASM_TOOLS + [
++        "crypto/ec/ecp_nistz256_table.c",
++        "ms/uplink-common.pl",
++        "ms/applink.c",
++    ],
+     assembly_flavor = select({
+         "//configs:darwin_arm64": "ios64",
+         "//configs:darwin_x86_64": "macosx",
+         "//configs:linux_aarch64": "linux64",
+         "//configs:linux_x86_64": "elf",
+         "//configs:windows_arm64": "win64",
+-        "//configs:windows_x64": "masm",
++        "//configs:windows_x64": "mingw64",
+     }),
+     srcs_to_outs = select({
+         "//configs:darwin_arm64": NIX_ARM64_PERLASM_TOOLS_AND_OUTS,
+@@ -338,6 +342,7 @@
  # We miss some sources and headers when doing the normal extraction
  OTHER_LIBCRYPTO_WINDOWS_HDRS = [
      "engines/e_capi_err.h",
@@ -33,7 +54,7 @@ diff -ruN a/BUILD.bazel b/BUILD.bazel
  ]
  
  OTHER_LIBCRYPTO_WINDOWS_SRCS = [
-@@ -406,7 +407,10 @@
+@@ -406,7 +411,10 @@
      name = "crypto",
      # Some of the srcs are duplicated because we have to glob over the directories with missing files
      # as only some of them are picked up.
@@ -45,7 +66,7 @@ diff -ruN a/BUILD.bazel b/BUILD.bazel
      hdrs = ALL_LIBCRYPTO_HDRS,
      # To make sure downstream targets add the right copts to be able to include the headers.
      copts = COMMON_OPENSSL_COPTS + select({
-@@ -436,10 +440,14 @@
+@@ -436,10 +444,14 @@
          "//configs:windows_x64": LIBCRYPTO_WINDOWS_INCLUDES,
          "//conditions:default": [],
      }),
@@ -64,7 +85,7 @@ diff -ruN a/BUILD.bazel b/BUILD.bazel
      textual_hdrs = CRYPTO_TEXTUAL_HDRS,
      visibility = ["//visibility:public"],
  )
-@@ -489,7 +497,11 @@
+@@ -489,7 +501,11 @@
      defines = COMMON_OPENSSL_DEFINES,
      # To make sure downstream targets add the right copts to be able to include the headers.
      includes = ["include"],
@@ -77,9 +98,9 @@ diff -ruN a/BUILD.bazel b/BUILD.bazel
      visibility = ["//visibility:public"],
      deps = [
          ":crypto",
-diff -ruN a/perl_genrule.bzl b/perl_genrule.bzl
---- a/perl_genrule.bzl	1969-12-31 19:00:00
-+++ b/perl_genrule.bzl	2025-12-23 19:19:43
+diff -ruN openssl-overlay-orig/perl_genrule.bzl openssl-overlay-mod/perl_genrule.bzl
+--- openssl-overlay-orig/perl_genrule.bzl	1969-12-31 19:00:00
++++ openssl-overlay-mod/perl_genrule.bzl	2025-12-27 04:23:31
 @@ -0,0 +1,179 @@
 +"""Generate files with perl. These are assumed to be .pl files as src and .s file as output.
 +"""

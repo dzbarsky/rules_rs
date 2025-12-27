@@ -211,6 +211,15 @@ crate.annotation(
 inject_repo(crate, "openssl")
 
 crate.annotation(
+    crate = "ring",
+    version = "0.16.20",
+    patch_args = ["-p1"],
+    patch_tool = "patch",
+    patches = ["//:ring-aarch64-windows-v6.patch"],
+    strip_prefix = "ring-0.16.20",
+)
+
+crate.annotation(
     build_script_env = {
         "AWS_LC_SYS_CFLAGS": "-fuse-ld=lld -Wno-unused-command-line-argument",
     },
@@ -294,10 +303,10 @@ crate.annotation(
 ### Is this correct?
 bazel_dep(name = "mimalloc", version = "2.2.4")
 
-crate.annotation(
-    crate = "libmimalloc_sys",
-    gen_build_script = "off",
-    deps = ["@mimalloc"],
-)
+#crate.annotation(
+#    crate = "libmimalloc-sys",
+#    gen_build_script = "off",
+#    deps = ["@mimalloc"],
+#)
 
 inject_repo(crate, "mimalloc")

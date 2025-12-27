@@ -31,8 +31,10 @@ filegroup(
 )
 
 ALL_PLATFORMS = [
-    "linux_arm64_musl",
-    "linux_amd64_musl",
+    "linux_arm64",
+    "linux_amd64",
+    #"linux_arm64_musl",
+    #"linux_amd64_musl",
     "macos_amd64",
     "macos_arm64",
     "windows_amd64",
