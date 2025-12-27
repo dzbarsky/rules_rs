@@ -7,10 +7,10 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4.11.0"
-#apple-codesign = "0.27.0"
+#apple-codesign = "0.27.0" - aws-lc-sys
 axum = "0.8.4"
 #bevy = "0.16.1"
-#ballista = "48.0.0"
+#ballista = "48.0.0" - aws-lc-sys
 bindgen = "0.72.1"
 candle-core = "0.9.1"
 cssparser = "0.35.0"
@@ -33,7 +33,7 @@ reqwest = "0.12.23"
 solana-client = "3.0.3"
 swc = "40.0.0"
 tantivy = "0.25.0"
-tauri = "2.8.5"
+#tauri = "2.8.5" - gtk-rs components like javascriptcore-rs-sys
 tao = "0.34.3"
 tonic = "0.14.2"
 tower = "0.5.2"
@@ -44,6 +44,6 @@ wasmtime = "37.0.0"
 wasm-bindgen = "0.2.103"
 #webrender = "0.61.0"
 wgpu = "26.0.1"
-wry = "0.53.3"
+#wry = "0.53.3"
 yew = "0.21.0"
 
