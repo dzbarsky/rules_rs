@@ -1,4 +1,5 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 DISABLED = [
     "annotation_crate_features",
@@ -23,10 +24,42 @@ TESTS = [f for f in glob(
     exclude_directories = 0,
 ) if "." not in f and "bazel-" not in f and f not in DISABLED]
 
+rust_binary(
+    name = "rust_binary",
+    srcs = ["main.rs"],
+    deps = [
+        "@many_workspace_deps//:actix-web",
+        "@many_workspace_deps//:apple-codesign",
+        "@many_workspace_deps//:axum",
+        "@many_workspace_deps//:ballista",
+        "@many_workspace_deps//:cssparser",
+        "@many_workspace_deps//:datafusion",
+        "@many_workspace_deps//:deltalake",
+        "@many_workspace_deps//:diesel",
+        "@many_workspace_deps//:ethers",
+        "@many_workspace_deps//:iced",
+        "@many_workspace_deps//:image",
+        "@many_workspace_deps//:oxc",
+        "@many_workspace_deps//:polars",
+        "@many_workspace_deps//:reqwest",
+        "@many_workspace_deps//:swc",
+        "@many_workspace_deps//:tantivy",
+        "@many_workspace_deps//:tao",
+        "@many_workspace_deps//:tonic",
+        "@many_workspace_deps//:tower",
+        "@many_workspace_deps//:walrus",
+        "@many_workspace_deps//:warp",
+        "@many_workspace_deps//:wasmtime",
+        "@many_workspace_deps//:wgpu",
+        "@many_workspace_deps//:yew",
+    ],
+)
+
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
+        ":rust_binary",
     ],
 )
 

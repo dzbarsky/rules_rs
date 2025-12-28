@@ -219,12 +219,30 @@ crate.annotation(
     strip_prefix = "ring-0.16.20",
 )
 
+bazel_dep(name = "aws-lc", version = "5.3.0-bcr.alpha.4")
+local_path_override(
+    module_name = "aws-lc",
+    path = "../../aws-lc",
+)
+
 crate.annotation(
+    deps = [
+        "@aws-lc//:crypto",
+        "@aws-lc//:ssl",
+    ],
+    build_script_data = [
+        "@aws-lc//:crypto",
+        "@aws-lc//:ssl",
+    ],
     build_script_env = {
-        "AWS_LC_SYS_CFLAGS": "-fuse-ld=lld -Wno-unused-command-line-argument",
+        "AWS_LC_SYS_PREBUILT_CRYPTO": "$(rootpaths @aws-lc//:crypto)",
+        "AWS_LC_SYS_PREBUILT_SSL": "$(rootpaths @aws-lc//:ssl)",
     },
+    patch_args = ["-p1"],
+    patches = ["//:aws-lc-sys-prebuilt.patch"],
     crate = "aws-lc-sys",
 )
+inject_repo(crate, "aws-lc")
 
 bazel_dep(name = "jemalloc", version = "5.3.0-bcr.alpha.4")
 
@@ -280,12 +298,7 @@ crate.annotation(
 
 inject_repo(crate, "cairo")
 
-
-bazel_dep(name = "at-spi2-core", version = "5.3.0-bcr.alpha.4")
-local_path_override(
-    module_name = "at-spi2-core",
-    path = "../../at-spi2-core",
-)
+bazel_dep(name = "at-spi2-core", version = "2.58.2")
 
 crate.annotation(
     crate = "atk-sys",
@@ -310,3 +323,25 @@ bazel_dep(name = "mimalloc", version = "2.2.4")
 #)
 
 inject_repo(crate, "mimalloc")
+
+# TODO(zbarsky): fix this for realz
+crate.annotation(
+    crate = "pango-sys",
+    gen_build_script = "off",
+)
+
+crate.annotation(
+    crate = "gdk-sys",
+    gen_build_script = "off",
+)
+
+crate.annotation(
+    crate = "gdkx11-sys",
+    gen_build_script = "off",
+)
+
+crate.annotation(
+    crate = "gtk-sys",
+    gen_build_script = "off",
+)
+
