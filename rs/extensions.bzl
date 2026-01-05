@@ -609,6 +609,10 @@ RESOLVED_PLATFORMS = select({{
         build_deps = {triple: set() for triple in platform_triples}
 
         for dep in package["dependencies"]:
+            if dep["kind"] == "dev":
+                # No dev deps for now.
+                continue
+
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 bazel_target = "//" + paths.join(cargo_lock_path.package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
