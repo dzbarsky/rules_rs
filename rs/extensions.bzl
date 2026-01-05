@@ -1,5 +1,6 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -619,6 +620,8 @@ RESOLVED_PLATFORMS = select({{
             else:
                 deps.append(bazel_target)
 
+        bazel_package = paths.join(cargo_lock_path.package, _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml"))
+
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
         "aliases": {{
@@ -631,7 +634,7 @@ RESOLVED_PLATFORMS = select({{
             {build_deps}
         ],
     }},""".format(
-            bazel_package = repr(_normalize_path(package["manifest_path"]).removeprefix(repo_root).removesuffix("/Cargo.toml")),
+            bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
             deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
             build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
