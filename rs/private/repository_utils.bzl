@@ -11,7 +11,7 @@ def _format_branches(branches):
         ",\n        ".join(['"%s": %s' % branch for branch in branches])
     )
 
-def _select(non_platform_items, platform_items):
+def render_select(non_platform_items, platform_items):
     if not platform_items:
         return non_platform_items, ""
 
@@ -40,7 +40,7 @@ def _select(non_platform_items, platform_items):
 
     return common_items, _format_branches(branches)
 
-def _select_build_script_env(platform_items):
+def render_select_build_script_env(platform_items):
     branches = [
         (_platform(triple), items)
         for triple, items in platform_items.items()
@@ -152,16 +152,16 @@ rust_crate(
     build_content += attr.additive_build_file_content
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
-    crate_features, conditional_crate_features = _select(
+    crate_features, conditional_crate_features = render_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
-    build_deps, conditional_build_deps = _select(attr.build_script_deps, attr.build_script_deps_select)
-    build_script_data, conditional_build_script_data = _select(attr.build_script_data, attr.build_script_data_select)
-    build_script_tools, conditional_build_script_tools = _select(attr.build_script_tools, attr.build_script_tools_select)
-    deps, conditional_deps = _select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
+    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select)
+    build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select)
+    build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select)
+    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
 
-    conditional_build_script_env = _select_build_script_env(attr.build_script_env_select)
+    conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select)
 
     binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
 

@@ -1,13 +1,14 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository")
-load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_repository.bzl", "git_repository")
+load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
@@ -604,23 +605,36 @@ RESOLVED_PLATFORMS = select({{
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
         aliases = {}
-        deps = []
-        build_deps = []
+        deps = {triple: set() for triple in platform_triples}
+        build_deps = {triple: set() for triple in platform_triples}
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
-                bazel_target = "//" + _normalize_path(dep["path"]).removeprefix(repo_root)
+                bazel_target = "//" + paths.join(cargo_lock_path.package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
 
                 # TODO(zbarsky): check if we actually need this?
                 aliases[bazel_target] = dep["name"]
 
-            if dep["kind"] == "build":
-                build_deps.append(bazel_target)
-            else:
-                deps.append(bazel_target)
+            target = dep.get("target")
+            match = cfg_match_cache.get(target)
+            if not match:
+                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+
+                # TODO(zbarsky): Figure out how to do this optimization safely.
+                #if len(match) == len(platform_cfg_attrs):
+                #    match = match_all
+                cfg_match_cache[target] = match
+
+            target_deps = build_deps if dep["kind"] == "build" else deps
+
+            for triple in match:
+                target_deps[triple].add(bazel_target)
 
         bazel_package = paths.join(cargo_lock_path.package, _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml"))
+
+        deps, conditional_deps = render_select([], deps)
+        build_deps, conditional_build_deps = render_select([], build_deps)
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
@@ -629,15 +643,17 @@ RESOLVED_PLATFORMS = select({{
         }},
         "deps": [
             {deps}
-        ],
+        ]{conditional_deps},
         "build_deps": [
             {build_deps}
-        ],
+        ]{conditional_build_deps},
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
             deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
+            conditional_deps = " + " + conditional_deps if conditional_deps else "",
             build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
+            conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
         ))
 
     data_bzl_contents = "DEP_DATA = {" + "\n".join(workspace_dep_stanzas) + "\n}"
