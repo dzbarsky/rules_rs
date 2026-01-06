@@ -568,9 +568,9 @@ def aliases(package_name = None):
 
 def all_crate_deps(
         normal = False,
-        #normal_dev = False,
+        normal_dev = False,
         proc_macro = False,
-        #proc_macro_dev = False,
+        proc_macro_dev = False,
         build = False,
         build_proc_macro = False,
         package_name = None,
@@ -583,7 +583,9 @@ def all_crate_deps(
     return _all_crate_deps(
         dep_data,
         normal = normal,
+        normal_dev = normal_dev,
         proc_macro = proc_macro,
+        proc_macro_dev = proc_macro_dev,
         build = build,
         build_proc_macro = build_proc_macro,
         filter_prefix = {this_repo} if cargo_only else None,
@@ -607,12 +609,9 @@ RESOLVED_PLATFORMS = select({{
         aliases = {}
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
+        dev_deps = {triple: set() for triple in platform_triples}
 
         for dep in package["dependencies"]:
-            if dep["kind"] == "dev":
-                # No dev deps for now.
-                continue
-
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 bazel_target = "//" + paths.join(cargo_lock_path.package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
@@ -630,7 +629,13 @@ RESOLVED_PLATFORMS = select({{
                 #    match = match_all
                 cfg_match_cache[target] = match
 
-            target_deps = build_deps if dep["kind"] == "build" else deps
+            kind = dep["kind"]
+            if kind == "dev":
+                target_deps = dev_deps
+            elif kind == "build":
+                target_deps = build_deps
+            else:
+                target_deps = deps
 
             for triple in match:
                 target_deps[triple].add(bazel_target)
@@ -639,6 +644,7 @@ RESOLVED_PLATFORMS = select({{
 
         deps, conditional_deps = render_select([], deps)
         build_deps, conditional_build_deps = render_select([], build_deps)
+        dev_deps, conditional_dev_deps = render_select([], dev_deps)
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
@@ -651,6 +657,9 @@ RESOLVED_PLATFORMS = select({{
         "build_deps": [
             {build_deps}
         ]{conditional_build_deps},
+        "dev_deps": [
+            {dev_deps}
+        ]{conditional_dev_deps},
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
@@ -658,6 +667,8 @@ RESOLVED_PLATFORMS = select({{
             conditional_deps = " + " + conditional_deps if conditional_deps else "",
             build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
+            dev_deps = ",\n            ".join(['"%s"' % d for d in sorted(dev_deps)]),
+            conditional_dev_deps = " + " + conditional_dev_deps if conditional_dev_deps else "",
         ))
 
     data_bzl_contents = "DEP_DATA = {" + "\n".join(workspace_dep_stanzas) + "\n}"
