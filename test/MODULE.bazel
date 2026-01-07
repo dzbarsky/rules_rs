@@ -324,6 +324,34 @@ bazel_dep(name = "mimalloc", version = "2.2.4")
 
 inject_repo(crate, "mimalloc")
 
+crate.annotation(
+    additive_build_file_content = """
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+cc_import(
+    name = "windows_import_lib",
+    static_library = glob(["lib/*.a"])[0],
+)
+""",
+    crate = "windows_x86_64_gnullvm",
+    deps = [":windows_import_lib"],
+    gen_build_script = "off",
+)
+
+crate.annotation(
+    additive_build_file_content = """
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+cc_import(
+    name = "windows_import_lib",
+    static_library = glob(["lib/*.a"])[0],
+)
+""",
+    crate = "windows_aarch64_gnullvm",
+    deps = [":windows_import_lib"],
+    gen_build_script = "off",
+)
+
 # TODO(zbarsky): fix this for realz
 crate.annotation(
     crate = "pango-sys",
@@ -344,4 +372,5 @@ crate.annotation(
     crate = "gtk-sys",
     gen_build_script = "off",
 )
+
 
