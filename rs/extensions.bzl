@@ -610,6 +610,22 @@ RESOLVED_PLATFORMS = select({{
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
         dev_deps = {triple: set() for triple in platform_triples}
+        package_dir = _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml")
+        binaries = {}
+
+        for target in package.get("targets", []):
+            if "bin" not in target.get("kind", []):
+                continue
+
+            src_path = target.get("src_path")
+            if not src_path:
+                continue
+
+            entrypoint = _normalize_path(src_path).removeprefix(repo_root + "/")
+            if package_dir and entrypoint.startswith(package_dir + "/"):
+                entrypoint = entrypoint.removeprefix(package_dir + "/")
+
+            binaries[target["name"]] = entrypoint
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
@@ -640,7 +656,7 @@ RESOLVED_PLATFORMS = select({{
             for triple in match:
                 target_deps[triple].add(bazel_target)
 
-        bazel_package = paths.join(cargo_lock_path.package, _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml"))
+        bazel_package = paths.join(cargo_lock_path.package, package_dir)
 
         deps, conditional_deps = render_select([], deps)
         build_deps, conditional_build_deps = render_select([], build_deps)
@@ -660,6 +676,9 @@ RESOLVED_PLATFORMS = select({{
         "dev_deps": [
             {dev_deps}
         ]{conditional_dev_deps},
+        "binaries": {{
+            {binaries}
+        }},
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
@@ -669,6 +688,7 @@ RESOLVED_PLATFORMS = select({{
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
             dev_deps = ",\n            ".join(['"%s"' % d for d in sorted(dev_deps)]),
             conditional_dev_deps = " + " + conditional_dev_deps if conditional_dev_deps else "",
+            binaries = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(binaries.items())]),
         ))
 
     data_bzl_contents = "DEP_DATA = {" + "\n".join(workspace_dep_stanzas) + "\n}"
