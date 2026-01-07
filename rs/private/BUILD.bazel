@@ -53,8 +53,8 @@ bzl_library(
     srcs = ["downloader.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
-        ":cargo_credentials",
         ":annotations",
+        ":cargo_credentials",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
     ],
@@ -93,14 +93,14 @@ bzl_library(
 )
 
 bzl_library(
-    name = "cfg_parser",
-    srcs = ["cfg_parser.bzl"],
+    name = "annotations",
+    srcs = ["annotations.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 
 bzl_library(
-    name = "annotations",
-    srcs = ["annotations.bzl"],
+    name = "cfg_parser",
+    srcs = ["cfg_parser.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 

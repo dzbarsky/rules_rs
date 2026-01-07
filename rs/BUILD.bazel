@@ -5,17 +5,17 @@ bzl_library(
     srcs = ["extensions.bzl"],
     visibility = ["//visibility:public"],
     deps = [
-        "@aspect_tools_telemetry_report//:defs.bzl",
+        "//rs/private:annotations",
         "//rs/private:cargo_credentials",
         "//rs/private:cfg_parser",
         "//rs/private:crate_git_repository",
         "//rs/private:crate_repository",
-        "//rs/private:annotations",
         "//rs/private:downloader",
         "//rs/private:git_repository",
         "//rs/private:resolver",
         "//rs/private:semver",
         "//rs/private:toml2json",
+        "@aspect_tools_telemetry_report//:defs.bzl",
     ],
 )
 
