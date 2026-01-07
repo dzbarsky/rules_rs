@@ -16,6 +16,7 @@ bzl_library(
         "//rs/private:semver",
         "//rs/private:toml2json",
         "@aspect_tools_telemetry_report//:defs.bzl",
+        "@bazel_skylib//lib:paths",
     ],
 )
 
