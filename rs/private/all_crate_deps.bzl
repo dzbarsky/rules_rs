@@ -1,4 +1,32 @@
-load(":rust_deps.bzl", "rust_deps")
+load(":rust_deps.bzl", _rust_deps = "rust_deps")
+
+def rust_deps(name, **kwargs):
+    if native.existing_rule(name):
+        fail("""
+ERROR: Multiple conflicting uses of `all_crate_deps`. If you are trying to use this macro with
+the same args in multiple targets, please try the following pattern:
+
+_DEPS = all_crate_deps()
+_PROC_MACRO_DEPS = all_crate_deps(proc_macro = True)
+
+rust_library(
+    name = "my_lib",
+    deps = _DEPS,
+    proc_macro_deps = _PROC_MACRO_DEPS,
+    ...
+)
+
+rust_test(
+    name = "my_test",
+    deps = [":my_lib"]+ _DEPS,
+    proc_macro_deps = _PROC_MACRO_DEPS,
+    ...
+)""")
+
+    _rust_deps(
+        name = name,
+        **kwargs
+    )
 
 def all_crate_deps(
         dep_data,
