@@ -117,6 +117,7 @@ def _generate_hub_and_spokes(
         platform_triples,
         cargo_credentials,
         cargo_config,
+        validate_lockfile,
         debug,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
@@ -132,6 +133,7 @@ def _generate_hub_and_spokes(
         platform_triples (list[string]): Triples to resolve for
         cargo_credentials (dict): Mapping of registry to auth token.
         cargo_config (label): .cargo/config.toml file
+        validate_lockfile (bool): If true, validte we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
@@ -349,23 +351,37 @@ def _generate_hub_and_spokes(
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:
-            if not dep["source"]:
+            source = dep["source"]
+            if not source:
                 continue
 
-            name = dep["name"]
+            dep_name = dep["name"]
+
+            if validate_lockfile and source.startswith("registry+"):
+                req = dep["req"]
+                fq = fq_deps.get(dep_name)
+                if req and fq:
+                    locked_version = fq[len(dep_name) + 1:]
+                    if not select_matching_version(req, [locked_version]):
+                        fail(("ERROR: Cargo.lock out of sync: %s requires %s %s but Cargo.lock has %s.\n\n" +
+                              "If this is incorrect, please set `validate_lockfile = False` in `crate.from_cargo`\n" +
+                              "and file a bug at https://github.com/dzbarsky/rules_rs/issues/new") % (
+                            package["name"], dep_name, req, locked_version
+                        ))
+                    continue
 
             features = dep["features"]
             if dep["uses_default_features"]:
                 features.append("default")
 
-            dep_fq = fq_deps[name]
+            dep_fq = fq_deps[dep_name]
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
-            versions = workspace_dep_versions_by_name.get(name)
+            versions = workspace_dep_versions_by_name.get(dep_name)
             if not versions:
                 versions = set()
-                workspace_dep_versions_by_name[name] = versions
+                workspace_dep_versions_by_name[dep_name] = versions
             versions.add(dep_fq)
 
             target = dep.get("target")
@@ -756,6 +772,7 @@ def _crate_impl(mctx):
         for cfg in mod.tags.from_cargo:
             annotations = build_annotation_map(mod, cfg.name)
             mctx.watch(cfg.cargo_lock)
+            mctx.watch(cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock["package"]
             packages_by_hub_name[cfg.name] = parsed_packages
@@ -804,9 +821,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
@@ -857,6 +874,10 @@ _from_cargo = tag_class(
         "platform_triples": attr.string_list(
             mandatory = True,
             doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build.",
+        ),
+        "validate_lockfile": attr.bool(
+            doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",
+            default = False,
         ),
         "debug": attr.bool(),
     },
