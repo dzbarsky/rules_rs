@@ -774,7 +774,7 @@ def _crate_impl(mctx):
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
-            parsed_packages = cargo_lock["package"]
+            parsed_packages = cargo_lock.get("package", [])
             packages_by_hub_name[cfg.name] = parsed_packages
 
             # Process git downloads first because they may require a followup download if the repo is a workspace,
