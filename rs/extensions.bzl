@@ -368,7 +368,6 @@ def _generate_hub_and_spokes(
                               "and file a bug at https://github.com/dzbarsky/rules_rs/issues/new") % (
                             package["name"], dep_name, req, locked_version
                         ))
-                    continue
 
             features = dep["features"]
             if dep["uses_default_features"]:
