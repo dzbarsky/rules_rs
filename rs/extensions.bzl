@@ -1,7 +1,7 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map")
+load("//rs/private:annotations.bzl", "WELL_KNOWN_ANNOTATIONS", "annotation_for", "build_annotation_map", "format_well_known_annotation")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -366,7 +366,10 @@ def _generate_hub_and_spokes(
                         fail(("ERROR: Cargo.lock out of sync: %s requires %s %s but Cargo.lock has %s.\n\n" +
                               "If this is incorrect, please set `validate_lockfile = False` in `crate.from_cargo`\n" +
                               "and file a bug at https://github.com/dzbarsky/rules_rs/issues/new") % (
-                            package["name"], dep_name, req, locked_version
+                            package["name"],
+                            dep_name,
+                            req,
+                            locked_version,
                         ))
 
             features = dep["features"]
@@ -442,6 +445,26 @@ def _generate_hub_and_spokes(
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         annotation = annotation_for(annotations, crate_name, version)
+        well_known_annotation = WELL_KNOWN_ANNOTATIONS.get(crate_name)
+        if well_known_annotation and annotation.gen_build_script == "auto":
+            print("""
+WARNING: A well-known crate annotation exists for {crate}! Apply the following to your MODULE.bazel:
+
+```
+{formatted_well_known_annotation}
+```
+
+You can disable this warning by configuring your MODULE.bazel like so:
+
+```
+crate.annotation(
+    crate = "{crate}",
+    gen_build_script = "on",
+)
+```""".format(
+                crate = crate_name,
+                formatted_well_known_annotation = format_well_known_annotation(crate_name, well_known_annotation),
+            ))
 
         kwargs = dict(
             hub_name = hub_name,

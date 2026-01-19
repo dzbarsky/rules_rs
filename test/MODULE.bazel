@@ -2,14 +2,19 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
 archive_override(
     module_name = "toolchains_llvm_bootstrapped",
-    integrity = "sha256-dBvq3EBkK0YWeYLZz+lPGT1EP5jKdpvZ7VJ6iy//ADM=",
-    patch_strip = 1,
-    patches = [
-        "//:toolchains_llvm_bootstrapped_ws2.patch",
-    ],
-    strip_prefix = "toolchains_llvm_bootstrapped-ae1f72282fbe8695c5641eda171d6b7b73e475b6",
-    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/ae1f72282fbe8695c5641eda171d6b7b73e475b6/master.tar.gz"],
+    integrity = "sha256-es2Zf7dKYEVDuvkm6E90CnunXSisameDh5/5nyhyu2Q=",
+    strip_prefix = "toolchains_llvm_bootstrapped-873b8be7d416283761b158ef4635e605970ab3db",
+    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/873b8be7d416283761b158ef4635e605970ab3db.tar.gz"],
 )
+
+osx = use_extension("@toolchains_llvm_bootstrapped//toolchain/extension:osx.bzl", "osx")
+
+osx.framework(name = "CoreFoundation")
+osx.framework(name = "CoreServices")
+osx.framework(name = "CFNetwork")
+osx.framework(name = "DiskArbitration")
+osx.framework(name = "IOKit")
+osx.framework(name = "Security")
 
 #local_path_override(
 #    module_name = "toolchains_llvm_bootstrapped",
@@ -158,8 +163,23 @@ crate.annotation(
 ]
 
 ### Fix -sys crates
+bazel_dep(name = "bzip2", version = "1.0.8.bcr.3")
+
+crate.annotation(
+    crate = "bzip2-sys",
+    gen_build_script = "off",
+    deps = ["@bzip2//:bz2"],
+)
+
+inject_repo(crate, "bzip2")
+
 bazel_dep(name = "glib", version = "2.82.2.bcr.7")
 
+crate.annotation(
+    crate = "gio-sys",
+    gen_build_script = "off",
+    deps = ["@glib//gio"],
+)
 crate.annotation(
     crate = "glib-sys",
     gen_build_script = "off",
@@ -170,14 +190,30 @@ crate.annotation(
     gen_build_script = "off",
     deps = ["@glib//gobject"],
 )
-crate.annotation(
-    crate = "gio-sys",
-    gen_build_script = "off",
-    deps = ["@glib//gio"],
-)
 
 inject_repo(crate, "glib")
 
+bazel_dep(name = "xz", version = "5.4.5.bcr.7")
+
+crate.annotation(
+    crate = "lzma-sys",
+    gen_build_script = "off",
+    deps = ["@xz//:lzma"],
+)
+
+inject_repo(crate, "xz")
+
+bazel_dep(name = "zstd", version = "1.5.7")
+
+crate.annotation(
+    crate = "zstd-sys",
+    gen_build_script = "off",
+    deps = ["@zstd"],
+)
+
+inject_repo(crate, "zstd")
+
+# TODO(zbarsky): alsa-sys is not curently tested, fix it
 bazel_dep(name = "alsa_lib", version = "1.2.9.bcr.4")
 
 crate.annotation(
