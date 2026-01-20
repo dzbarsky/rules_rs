@@ -197,8 +197,10 @@ bazel_dep(name = "xz", version = "5.4.5.bcr.7")
 
 crate.annotation(
     crate = "lzma-sys",
-    gen_build_script = "off",
-    deps = ["@xz//:lzma"],
+    # TODO(zbarsky): Doesn't work on windows arm?
+    #gen_build_script = "off",
+    #deps = ["@xz//:lzma"],
+    gen_build_script = "on",
 )
 
 inject_repo(crate, "xz")
