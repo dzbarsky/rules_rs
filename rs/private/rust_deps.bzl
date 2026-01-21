@@ -22,6 +22,18 @@ def _rust_deps_impl(ctx):
                 crate_group_info = None,
             ))
             deps.append(dep)
+        elif BuildInfo in dep:
+            # Build scripts are always normal deps.
+            if ctx.attr.proc_macros:
+                continue
+            dep_variant_infos.append(DepVariantInfo(
+                crate_info = dep[CrateInfo] if CrateInfo in dep else None,
+                dep_info = dep[DepInfo] if DepInfo in dep else None,
+                build_info = dep[BuildInfo] if BuildInfo in dep else None,
+                cc_info = dep[CcInfo] if CcInfo in dep else None,
+                crate_group_info = None,
+            ))
+            deps.append(dep)
         elif CcInfo in dep:
             if ctx.attr.proc_macros:
                 continue
@@ -56,7 +68,7 @@ rust_deps = rule(
     attrs = {
         "deps": attr.label_list(
             doc = "Other dependencies to forward through this crate group.",
-            providers = [[CrateInfo], [CcInfo]],
+            providers = [[BuildInfo], [CrateInfo], [CcInfo]],
         ),
         "proc_macros": attr.bool(),
     },
