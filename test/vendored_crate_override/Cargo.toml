@@ -1,0 +1,9 @@
+[workspace]
+members = ["app"]
+resolver = "3"
+
+[workspace.dependencies]
+itoa = "1.0.11"
+
+[patch.crates-io]
+itoa = { path = "vendor/itoa" }

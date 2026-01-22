@@ -93,6 +93,7 @@ TESTS = [
     "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
+    "vendored_crate_override",
     "binaries",
     "uv",
 ]
