@@ -8,7 +8,6 @@ archive_override(
 )
 
 osx = use_extension("@toolchains_llvm_bootstrapped//toolchain/extension:osx.bzl", "osx")
-
 osx.framework(name = "CoreFoundation")
 osx.framework(name = "CoreServices")
 osx.framework(name = "CFNetwork")
@@ -326,11 +325,7 @@ crate.annotation(
 
 inject_repo(crate, "gdk-pixbuf")
 
-bazel_dep(name = "cairo", version = "5.3.0-bcr.alpha.4")
-local_path_override(
-    module_name = "cairo",
-    path = "../../cairo",
-)
+bazel_dep(name = "cairo", version = "1.18.4")
 
 crate.annotation(
     crate = "cairo-sys-rs",

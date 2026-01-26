@@ -78,6 +78,8 @@
     "https://bcr.bazel.build/modules/buildozer/8.2.1/source.json": "7c33f6a26ee0216f85544b4bca5e9044579e0219b6898dd653f5fb449cf2e484",
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.3/MODULE.bazel": "29ecf4babfd3c762be00d7573c288c083672ab60e79c833ff7f49ee662e54471",
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.3/source.json": "8be4a3ef2599693f759e5c0990a4cc5a246ac08db4c900a38f852ba25b5c39be",
+    "https://bcr.bazel.build/modules/cairo/1.18.4/MODULE.bazel": "2d57043232a53a6b2e419049959ee747279127d5f7eca9db5f42c6d387ae9d6d",
+    "https://bcr.bazel.build/modules/cairo/1.18.4/source.json": "b8ac2f99c506c16cd246bb4132cc4a6e3f1a9051ee7a8a1b9f808c3ab57f4886",
     "https://bcr.bazel.build/modules/gawk/5.3.2.bcr.1/MODULE.bazel": "cdf8cbe5ee750db04b78878c9633cc76e80dcf4416cbe982ac3a9222f80713c8",
     "https://bcr.bazel.build/modules/gawk/5.3.2.bcr.1/source.json": "fa7b512dfcb5eafd90ce3959cf42a2a6fe96144ebbb4b3b3928054895f2afac2",
     "https://bcr.bazel.build/modules/gazelle/0.32.0/MODULE.bazel": "b499f58a5d0d3537f3cf5b76d8ada18242f64ec474d8391247438bf04f58c7b8",
