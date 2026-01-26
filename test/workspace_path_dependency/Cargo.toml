@@ -1,0 +1,7 @@
+[workspace]
+members = ["app"]
+resolver = "3"
+
+[workspace.dependencies]
+app = { path = "./app" }
+itoa = { path = "../vendored_crate_override/vendor/itoa" }

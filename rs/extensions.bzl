@@ -58,6 +58,26 @@ def _date(ctx, label):
 def _normalize_path(path):
     return path.replace("\\", "/")
 
+def _relative_to_workspace(path, workspace_root):
+    normalized_root = _normalize_path(workspace_root)
+    normalized_path = _normalize_path(path)
+
+    if not paths.is_absolute(normalized_path):
+        normalized_path = _normalize_path(paths.normalize(paths.join(normalized_root, normalized_path)))
+
+    root_parts = [p for p in normalized_root.split("/") if p]
+    path_parts = [p for p in normalized_path.split("/") if p]
+
+    common = 0
+    max_common = min(len(root_parts), len(path_parts))
+    for idx in range(max_common):
+        if root_parts[idx] != path_parts[idx]:
+            break
+        common = idx + 1
+
+    rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
+    return "/".join(rel_parts) if rel_parts else "."
+
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
         dep = {"name": dep}
@@ -165,12 +185,8 @@ def _generate_hub_and_spokes(
     for package in cargo_metadata["packages"]:
         for dep in package.get("dependencies", []):
             dep_path = dep.get("path")
-            if dep_path and dep["name"] not in dep_paths_by_name:
-                dep_path = _normalize_path(dep_path)
-                if dep_path.startswith(workspace_root_prefix):
-                    dep_paths_by_name[dep["name"]] = dep_path.removeprefix(workspace_root_prefix)
-                else:
-                    fail("Path dependency %s points outside the workspace: %s" % (dep["name"], dep_path))
+            if dep_path:
+                dep_paths_by_name[dep["name"]] = _relative_to_workspace(dep_path, workspace_root)
 
     patch_paths_by_name = {}
     for registry_patches in workspace_cargo_toml_json.get("patch", {}).values():
@@ -188,7 +204,6 @@ def _generate_hub_and_spokes(
                     fail("Patch path for %s points outside the workspace: %s" % (name, patch_path))
                 rel_patch_path = normalized.removeprefix(workspace_root_prefix)
             else:
-                normalized = paths.normalize(paths.join(workspace_root, patch_path))
                 rel_patch_path = _normalize_path(paths.normalize(patch_path))
 
             patch_paths_by_name[name] = rel_patch_path
@@ -449,14 +464,18 @@ def _generate_hub_and_spokes(
 
         for dep in package["dependencies"]:
             source = dep["source"]
-            if not source:
+            dep_name = dep["name"]
+            dep_fq = fq_deps.get(dep_name)
+            dep_version = None
+            if dep_fq:
+                dep_version = dep_fq[len(dep_name) + 1:]
+
+            if not source and dep_version and (dep_name, dep_version) in workspace_member_keys:
                 continue
 
-            dep_name = dep["name"]
-
-            if validate_lockfile and source.startswith("registry+"):
+            if validate_lockfile and source and source.startswith("registry+"):
                 req = dep["req"]
-                fq = fq_deps.get(dep_name)
+                fq = dep_fq
                 if req and fq:
                     locked_version = fq[len(dep_name) + 1:]
                     if not select_matching_version(req, [locked_version]):
@@ -473,7 +492,9 @@ def _generate_hub_and_spokes(
             if dep["uses_default_features"]:
                 features.append("default")
 
-            dep_fq = fq_deps[dep_name]
+            if not dep_fq:
+                continue
+
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
@@ -623,7 +644,6 @@ crate.annotation(
             local_crate_repository(
                 name = repo_name,
                 path = package["local_path"],
-                strip_prefix = package.get("strip_prefix", ""),
                 **kwargs
             )
         elif source.startswith("git+"):

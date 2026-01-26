@@ -43,15 +43,14 @@ crate_repository = repository_rule(
 )
 
 def _local_crate_repository_impl(rctx):
+    if rctx.attr.strip_prefix:
+        fail("strip_prefix not implemented")
+
     root = rctx.path(rctx.attr.path)
     if not root.exists:
         fail("crate path %s does not exist" % rctx.attr.path)
 
-    crate_root = root.get_child(rctx.attr.strip_prefix) if rctx.attr.strip_prefix else root
-    if not crate_root.exists:
-        fail("strip_prefix %s does not exist under %s" % (rctx.attr.strip_prefix, rctx.attr.path))
-
-    for entry in crate_root.readdir():
+    for entry in root.readdir():
         rctx.symlink(entry, entry.basename)
 
     patch(rctx)

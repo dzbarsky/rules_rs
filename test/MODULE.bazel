@@ -94,6 +94,7 @@ TESTS = [
     "optional_build_deps",
     "platform_dep_features",
     "vendored_crate_override",
+    "workspace_path_dependency",
     "binaries",
     "uv",
 ]
