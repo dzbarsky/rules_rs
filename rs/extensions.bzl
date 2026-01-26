@@ -5,7 +5,7 @@ load("//rs/private:annotations.bzl", "WELL_KNOWN_ANNOTATIONS", "annotation_for",
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
-load("//rs/private:crate_repository.bzl", "crate_repository")
+load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:repository_utils.bzl", "render_select")
@@ -57,6 +57,26 @@ def _date(ctx, label):
 
 def _normalize_path(path):
     return path.replace("\\", "/")
+
+def _relative_to_workspace(path, workspace_root):
+    normalized_root = _normalize_path(workspace_root)
+    normalized_path = _normalize_path(path)
+
+    if not paths.is_absolute(normalized_path):
+        normalized_path = _normalize_path(paths.normalize(paths.join(normalized_root, normalized_path)))
+
+    root_parts = [p for p in normalized_root.split("/") if p]
+    path_parts = [p for p in normalized_path.split("/") if p]
+
+    common = 0
+    max_common = min(len(root_parts), len(path_parts))
+    for idx in range(max_common):
+        if root_parts[idx] != path_parts[idx]:
+            break
+        common = idx + 1
+
+    rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
+    return "/".join(rel_parts) if rel_parts else "."
 
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
@@ -112,6 +132,7 @@ def _generate_hub_and_spokes(
         annotations,
         cargo_path,
         cargo_lock_path,
+        workspace_cargo_toml_json,
         all_packages,
         sparse_registry_configs,
         platform_triples,
@@ -128,6 +149,7 @@ def _generate_hub_and_spokes(
         annotations (dict): Annotation tags to apply.
         cargo_path (path): Path to hermetic `cargo` binary.
         cargo_lock_path (path): Cargo.lock path
+        workspace_cargo_toml_json (dict): Parsed workspace Cargo.toml
         all_packages: list[package]: from cargo lock parsing
         sparse_registry_configs: dict[source, sparse registry config]
         platform_triples (list[string]): Triples to resolve for
@@ -153,9 +175,65 @@ def _generate_hub_and_spokes(
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
 
-    # Ignore workspace members
-    workspace_members = [p for p in all_packages if "source" not in p]
-    packages = [p for p in all_packages if p.get("source")]
+    workspace_root = _normalize_path(cargo_metadata["workspace_root"])
+    workspace_root_prefix = workspace_root + "/"
+    workspace_member_keys = {}
+    for package in cargo_metadata["packages"]:
+        workspace_member_keys[(package["name"], package["version"])] = True
+
+    dep_paths_by_name = {}
+    for package in cargo_metadata["packages"]:
+        for dep in package.get("dependencies", []):
+            dep_path = dep.get("path")
+            if dep_path:
+                dep_paths_by_name[dep["name"]] = _relative_to_workspace(dep_path, workspace_root)
+
+    patch_paths_by_name = {}
+    for registry_patches in workspace_cargo_toml_json.get("patch", {}).values():
+        for name, spec in registry_patches.items():
+            if type(spec) != "dict":
+                continue
+
+            patch_path = spec.get("path")
+            if not patch_path:
+                continue
+
+            if patch_path.startswith("/"):
+                normalized = _normalize_path(patch_path)
+                if not normalized.startswith(workspace_root_prefix):
+                    fail("Patch path for %s points outside the workspace: %s" % (name, patch_path))
+                rel_patch_path = normalized.removeprefix(workspace_root_prefix)
+            else:
+                rel_patch_path = _normalize_path(paths.normalize(patch_path))
+
+            patch_paths_by_name[name] = rel_patch_path
+
+    workspace_members = []
+    packages = []
+
+    for package in all_packages:
+        pkg = dict(package)
+
+        if pkg.get("source"):
+            packages.append(pkg)
+            continue
+
+        key = (pkg["name"], pkg["version"])
+        if key in workspace_member_keys:
+            workspace_members.append(pkg)
+            continue
+
+        rel_path = patch_paths_by_name.get(pkg["name"]) or dep_paths_by_name.get(pkg["name"])
+        local_path = rel_path
+        if rel_path and not rel_path.startswith("/"):
+            local_path = paths.join(workspace_root, rel_path)
+
+        if not local_path:
+            fail("Found a path dependency on %s %s but could not determine its path from Cargo.toml. Please declare it in [patch] or as a path dependency." % (pkg["name"], pkg["version"]))
+
+        pkg["source"] = "path+" + hub_name + "/" + rel_path
+        pkg["local_path"] = local_path
+        packages.append(pkg)
 
     platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
 
@@ -218,7 +296,39 @@ def _generate_hub_and_spokes(
 
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
-        else:
+        elif source.startswith("path+"):
+            key = source + "_" + name
+            fact = existing_facts.get(key)
+            if fact:
+                facts[key] = fact
+                fact = json.decode(fact)
+            else:
+                annotation = annotation_for(annotations, name, package["version"])
+                cargo_toml_json = run_toml2json(mctx, paths.join(package["local_path"], "Cargo.toml"))
+
+                dependencies = [
+                    _spec_to_dep_dict(dep, spec, annotation, {})
+                    for dep, spec in cargo_toml_json.get("dependencies", {}).items()
+                ] + [
+                    _spec_to_dep_dict(dep, spec, annotation, {}, is_build = True)
+                    for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
+                ]
+
+                for target, value in cargo_toml_json.get("target", {}).items():
+                    for dep, spec in value.get("dependencies", {}).items():
+                        converted = _spec_to_dep_dict(dep, spec, annotation, {})
+                        converted["target"] = target
+                        dependencies.append(converted)
+
+                fact = dict(
+                    features = cargo_toml_json.get("features", {}),
+                    dependencies = dependencies,
+                    strip_prefix = "",
+                )
+
+                facts[key] = json.encode(fact)
+            package["strip_prefix"] = fact.get("strip_prefix", "")
+        elif source.startswith("git+"):
             key = source + "_" + name
             fact = existing_facts.get(key)
             if fact:
@@ -265,6 +375,8 @@ def _generate_hub_and_spokes(
                 facts[key] = json.encode(fact)
 
             package["strip_prefix"] = fact["strip_prefix"]
+        else:
+            fail("Unknown source %s for crate %s" % (source, name))
 
         possible_features = fact["features"]
         possible_deps = [
@@ -352,14 +464,18 @@ def _generate_hub_and_spokes(
 
         for dep in package["dependencies"]:
             source = dep["source"]
-            if not source:
+            dep_name = dep["name"]
+            dep_fq = fq_deps.get(dep_name)
+            dep_version = None
+            if dep_fq:
+                dep_version = dep_fq[len(dep_name) + 1:]
+
+            if not source and dep_version and (dep_name, dep_version) in workspace_member_keys:
                 continue
 
-            dep_name = dep["name"]
-
-            if validate_lockfile and source.startswith("registry+"):
+            if validate_lockfile and source and source.startswith("registry+"):
                 req = dep["req"]
-                fq = fq_deps.get(dep_name)
+                fq = dep_fq
                 if req and fq:
                     locked_version = fq[len(dep_name) + 1:]
                     if not select_matching_version(req, [locked_version]):
@@ -376,7 +492,9 @@ def _generate_hub_and_spokes(
             if dep["uses_default_features"]:
                 features.append("default")
 
-            dep_fq = fq_deps[dep_name]
+            if not dep_fq:
+                continue
+
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
@@ -519,7 +637,16 @@ crate.annotation(
                 source = source,
                 **kwargs
             )
-        else:
+        elif source.startswith("path+"):
+            if dry_run:
+                continue
+
+            local_crate_repository(
+                name = repo_name,
+                path = package["local_path"],
+                **kwargs
+            )
+        elif source.startswith("git+"):
             remote, commit = parse_git_url(source)
 
             strip_prefix = package.get("strip_prefix")
@@ -537,6 +664,8 @@ crate.annotation(
                 workspace_cargo_toml = annotation.workspace_cargo_toml,
                 **kwargs
             )
+        else:
+            fail("Unknown source %s for crate %s" % (source, crate_name))
 
     _date(mctx, "created repos")
 
@@ -786,6 +915,7 @@ def _crate_impl(mctx):
     downloader_state = new_downloader_state()
 
     packages_by_hub_name = {}
+    cargo_toml_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
@@ -795,6 +925,7 @@ def _crate_impl(mctx):
             annotations = build_annotation_map(mod, cfg.name)
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
+            cargo_toml_by_hub_name[cfg.name] = run_toml2json(mctx, cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock.get("package", [])
             packages_by_hub_name[cfg.name] = parsed_packages
@@ -843,9 +974,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()

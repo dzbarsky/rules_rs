@@ -41,3 +41,29 @@ crate_repository = repository_rule(
         "checksum": attr.string(),
     } | common_attrs,
 )
+
+def _local_crate_repository_impl(rctx):
+    if rctx.attr.strip_prefix:
+        fail("strip_prefix not implemented")
+
+    root = rctx.path(rctx.attr.path)
+    if not root.exists:
+        fail("crate path %s does not exist" % rctx.attr.path)
+
+    for entry in root.readdir():
+        rctx.symlink(entry, entry.basename)
+
+    patch(rctx)
+
+    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+
+    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+
+    return rctx.repo_metadata(reproducible = True)
+
+local_crate_repository = repository_rule(
+    implementation = _local_crate_repository_impl,
+    attrs = {
+        "path": attr.string(mandatory = True),
+    } | common_attrs,
+)

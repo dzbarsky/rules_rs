@@ -182,6 +182,8 @@ def start_crate_registry_downloads(
                 ),
                 packages = [package],
             )
+        elif source.startswith("path+"):
+            continue
         else:
             fail("Unknown source " + source)
 
