@@ -202,25 +202,44 @@ crate.annotation(
 """.format(name = fetch_state.packages[0]["name"]))
         # TODO(zbarsky): ^^ this currently needs to be configured for all packages, should we make it nicer?
 
+def _find_path_dependency(dependencies, name):
+    for dep_name, dep in (dependencies or {}).items():
+        if type(dep) != "dict":
+            continue
+
+        dep_package = dep.get("package", dep_name)
+        if dep_package != name:
+            continue
+
+        path = dep.get("path")
+        if path:
+            return path
+
+    return None
+
 def _compute_strip_prefix(annotation, cargo_toml_json, name):
     strip_prefix = annotation.strip_prefix
 
-    workspace = cargo_toml_json["workspace"]
+    workspace = cargo_toml_json.get("workspace") or {}
 
-    if not strip_prefix and name in workspace["members"]:
+    if not strip_prefix and name in workspace.get("members", []):
         strip_prefix = name
 
     if not strip_prefix:
         # Handle `uv-python = { path = "crates/uv-python" }` when `members` includes wildcard.
-        dep = workspace["dependencies"].get(name)
-        if type(dep) == "dict":
-            strip_prefix = dep["path"]
+        strip_prefix = _find_path_dependency(workspace.get("dependencies"), name)
 
     if not strip_prefix:
         # Handle `wirefilter = { path = "engine", package = "wirefilter-engine" }` when crate is aliased internally.
-        for dep in workspace["dependencies"].values():
-            if type(dep) == "dict" and dep.get("package") == name:
-                strip_prefix = dep["path"]
+        strip_prefix = _find_path_dependency(cargo_toml_json.get("dependencies"), name)
+
+    if not strip_prefix:
+        strip_prefix = _find_path_dependency(cargo_toml_json.get("build-dependencies"), name)
+
+    if not strip_prefix:
+        for target in (cargo_toml_json.get("target") or {}).values():
+            strip_prefix = _find_path_dependency(target.get("dependencies"), name)
+            if strip_prefix:
                 break
 
     # TODO(zbarsky): any more cases to handle here?
