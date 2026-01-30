@@ -1,0 +1,49 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+
+package(default_visibility = ["//visibility:public"])
+
+bzl_library(
+    name = "declare_rustc_toolchains",
+    srcs = ["declare_rustc_toolchains.bzl"],
+    deps = [
+        ":toolchain_utils",
+        "//rs/experimental/platforms:triples",
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "declare_rustfmt_toolchains",
+    srcs = ["declare_rustfmt_toolchains.bzl"],
+    deps = [
+        ":toolchain_utils",
+        "//rs/experimental/platforms:triples",
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "module_extension",
+    srcs = ["module_extension.bzl"],
+    deps = [
+        ":toolchain_utils",
+        "//rs/experimental/platforms:triples",
+        "//rs/private:cargo_repository",
+        "//rs/private:clippy_repository",
+        "//rs/private:host_tools_repository",
+        "//rs/private:rust_repository_utils",
+        "//rs/private:rustc_repository",
+        "//rs/private:rustfmt_repository",
+        "//rs/private:stdlib_repository",
+        "//rs/private:toolchains_repository",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "toolchain_utils",
+    srcs = ["toolchain_utils.bzl"],
+)

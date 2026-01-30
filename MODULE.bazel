@@ -1,23 +1,32 @@
-"Bazel dependencies"
+module(name = "rules_rs")
 
-module(
-    name = "rules_rs",
-)
+########### BECOME THE RULES_RUST FACADE ################
+rules_rust = use_extension("//rs/experimental:rules_rust.bzl", "rules_rust")
+use_repo(rules_rust, "rules_rust")
 
-bazel_dep(name = "rules_rust", version = "0.66.0")
-
-# TODO(zbarsky): A bit unfortunate that we need to define a new set of host tools instead of reusing the existing one pulled in by rules_rust.
-# Can we figure out how to access that? Perhaps add an alias?
-rust_host_tools = use_extension("@rules_rust//rust:extensions.bzl", "rust_host_tools")
-rust_host_tools.host_tools(
-    name = "rs_rust_host_tools",
-)
-use_repo(
-    rust_host_tools,
-    "rs_rust_host_tools",
-)
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_archive(
+    name = "rules_rust_tinyjson",
+    build_file = "@rules_rust//util/process_wrapper:BUILD.tinyjson.bazel",
+    sha256 = "9ab95735ea2c8fd51154d01e39cf13912a78071c2d89abc49a7ef102a7dd725a",
+    strip_prefix = "tinyjson-2.5.1",
+    type = "tar.gz",
+    url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
+)
+
+bazel_dep(name = "apple_support", version = "1.24.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+#########################################################
+
+toolchains = use_extension("//rs/experimental/toolchains:module_extension.bzl", "toolchains")
+use_repo(
+    toolchains,
+    "rs_rust_host_tools",
+)
 
 [
     http_file(
@@ -41,6 +50,7 @@ bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")
 bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.2")
 bazel_dep(name = "aspect_tools_telemetry", version = "0.3.2")
 
 tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")

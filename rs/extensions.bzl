@@ -1,6 +1,7 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
@@ -22,7 +23,9 @@ def _spoke_repo(hub_name, name, version):
 def _external_repo_for_git_source(remote, commit):
     return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
 
-def _platform(triple):
+def _platform(triple, use_experimental_platforms):
+    if use_experimental_platforms:
+        return "@rules_rs//rs/experimental/platforms/config:" + triple
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
 
 def _select(items):
@@ -148,6 +151,7 @@ def _generate_hub_and_spokes(
         cargo_config,
         validate_lockfile,
         debug,
+        use_experimental_platforms,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -627,6 +631,7 @@ crate.annotation(
             patch_args = annotation.patch_args,
             patch_tool = annotation.patch_tool,
             patches = annotation.patches,
+            use_experimental_platforms = use_experimental_platforms,
         )
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
@@ -729,6 +734,7 @@ alias(
     workspace_deps, conditional_workspace_deps = render_select(
         [],
         workspace_dep_labels_by_triple,
+        use_experimental_platforms,
     )
 
     hub_contents.append(
@@ -789,7 +795,7 @@ RESOLVED_PLATFORMS = select({{
     "//conditions:default": ["@platforms//:incompatible"],
 }})
 """.format(
-            target_compatible_with = ",\n    ".join(['"%s": []' % _platform(triple) for triple in platform_triples]),
+            target_compatible_with = ",\n    ".join(['"%s": []' % _platform(triple, use_experimental_platforms) for triple in platform_triples]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 
@@ -854,9 +860,9 @@ RESOLVED_PLATFORMS = select({{
 
         bazel_package = paths.join(workspace_package, package_dir)
 
-        deps, conditional_deps = render_select([], deps)
-        build_deps, conditional_build_deps = render_select([], build_deps)
-        dev_deps, conditional_dev_deps = render_select([], dev_deps)
+        deps, conditional_deps = render_select([], deps, use_experimental_platforms)
+        build_deps, conditional_build_deps = render_select([], build_deps, use_experimental_platforms)
+        dev_deps, conditional_dev_deps = render_select([], dev_deps, use_experimental_platforms)
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
@@ -940,7 +946,7 @@ def _compute_workspace_fq_deps(workspace_members, versions_by_name):
 
 def _crate_impl(mctx):
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
-    cargo_path = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
+    cargo_path = mctx.path(RS_HOST_CARGO_LABEL)
 
     # And toml2json
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
@@ -1008,9 +1014,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
@@ -1061,6 +1067,10 @@ _from_cargo = tag_class(
         "platform_triples": attr.string_list(
             mandatory = True,
             doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build.",
+        ),
+        "use_experimental_platforms": attr.bool(
+            doc = "If true, use experimental rules_rs platforms. If false, use the stable rules_rust platforms.",
+            default = False,
         ),
         "validate_lockfile": attr.bool(
             doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",

@@ -9,14 +9,14 @@ crate.annotation(
     build_script_env = {
         "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
         "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
-        "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
+        "LIBCLANG_PATH": "$(location @llvm-project//clang:libclang_interface_output)",
     },
     build_script_tools = [
-        "@rules_rs_test//:clang",
+        "@llvm-project//clang:libclang_interface_output",
         "@toolchains_llvm_bootstrapped//:builtin_headers",
     ],
     crate = "coreaudio-sys",
     gen_build_script = "on",
 )
 
-inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")
+inject_repo(crate, "llvm-project", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")

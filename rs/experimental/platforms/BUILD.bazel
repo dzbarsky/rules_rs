@@ -1,0 +1,20 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("//rs/experimental/platforms:declare_platforms.bzl", "declare_platforms")
+
+declare_platforms()
+
+bzl_library(
+    name = "declare_platforms",
+    srcs = ["declare_platforms.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [":triples"],
+)
+
+bzl_library(
+    name = "triples",
+    srcs = ["triples.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
