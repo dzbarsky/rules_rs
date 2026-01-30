@@ -640,8 +640,8 @@
     },
     "@@rules_rs+//experimental/toolchains:module_extension.bzl%toolchains": {
       "general": {
-        "bzlTransitiveDigest": "Wkrj8K5cw7/NCobBT6snc4Exg2YkvIE3wuRlcd0eMH0=",
-        "usagesDigest": "OSQJUICypEtXLqSD8ITxUb877ftlWsX/yA4snaIPwmw=",
+        "bzlTransitiveDigest": "R6Y+RNO37sG6xIhiFOtHM7TB1uXID2j2zfK5iwMKl3A=",
+        "usagesDigest": "naZa2i2WkfzpRJIcCBQb4w86dysHnxOOxx0DmTQVPFg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
@@ -649,25 +649,25 @@
           "REPO_MAPPING:rules_cc+,platforms platforms",
           "REPO_MAPPING:rules_cc+,rules_cc rules_cc+",
           "REPO_MAPPING:rules_cc++compatibility_proxy+cc_compatibility_proxy,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_rs+,rules_rust rules_rust+",
+          "REPO_MAPPING:rules_rs+,rules_rust rules_rs++http_archive+rules_rust",
           "REPO_MAPPING:rules_rs+,toolchains_llvm_bootstrapped toolchains_llvm_bootstrapped+",
-          "REPO_MAPPING:rules_rust+,bazel_skylib bazel_skylib+",
-          "REPO_MAPPING:rules_rust+,bazel_tools bazel_tools",
-          "REPO_MAPPING:rules_rust+,rules_cc rules_cc+",
-          "REPO_MAPPING:rules_rust+,rules_rust rules_rust+"
+          "REPO_MAPPING:rules_rs++http_archive+rules_rust,bazel_skylib bazel_skylib+",
+          "REPO_MAPPING:rules_rs++http_archive+rules_rust,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_rs++http_archive+rules_rust,rules_cc rules_cc+",
+          "REPO_MAPPING:rules_rs++http_archive+rules_rust,rules_rust rules_rs++http_archive+rules_rust"
         ],
         "generatedRepoSpecs": {
           "rust_toolchain_artifacts_linux_x86_64_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
             "attributes": {
-              "exec_triple": "x86_64-unknown-linux-gnu",
+              "exec_triple": "x86_64-unknown-linux-musl",
               "version": "1.92.0"
             }
           },
           "rust_toolchain_artifacts_linux_aarch64_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
             "attributes": {
-              "exec_triple": "aarch64-unknown-linux-gnu",
+              "exec_triple": "aarch64-unknown-linux-musl",
               "version": "1.92.0"
             }
           },
@@ -685,6 +685,13 @@
               "version": "1.92.0"
             }
           },
+          "rust_toolchain_artifacts_macos_x86_64_1_92_0": {
+            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
+            "attributes": {
+              "exec_triple": "x86_64-apple-darwin",
+              "version": "1.92.0"
+            }
+          },
           "rust_toolchain_artifacts_macos_aarch64_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
             "attributes": {
@@ -699,24 +706,10 @@
               "version": "1.92.0"
             }
           },
-          "rust_stdlib_aarch64_unknown_linux_gnu_1_92_0": {
-            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
-            "attributes": {
-              "target_triple": "aarch64-unknown-linux-gnu",
-              "version": "1.92.0"
-            }
-          },
           "rust_stdlib_x86_64_apple_darwin_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
             "attributes": {
               "target_triple": "x86_64-apple-darwin",
-              "version": "1.92.0"
-            }
-          },
-          "rust_stdlib_x86_64_unknown_linux_gnu_1_92_0": {
-            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
-            "attributes": {
-              "target_triple": "x86_64-unknown-linux-gnu",
               "version": "1.92.0"
             }
           },
@@ -725,6 +718,12 @@
             "attributes": {
               "version": "1.92.0",
               "edition": "2024"
+            }
+          },
+          "rs_rust_host_tools": {
+            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%_host_tools_repo",
+            "attributes": {
+              "repo": "rust_toolchain_artifacts_macos_aarch64_1_92_0"
             }
           }
         }

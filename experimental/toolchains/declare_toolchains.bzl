@@ -20,6 +20,7 @@ _EXEC_CONFIGS = [
     struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "aarch64"),
     struct(name = "windows_x86_64", exec_triple = "x86_64-pc-windows-msvc", exec_os = "windows", exec_cpu = "x86_64"),
     struct(name = "windows_aarch64", exec_triple = "aarch64-pc-windows-msvc", exec_os = "windows", exec_cpu = "aarch64"),
+    struct(name = "macos_x86_64", exec_triple = "x86_64-apple-darwin", exec_os = "macos", exec_cpu = "x86_64"),
     struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin", exec_os = "macos", exec_cpu = "aarch64"),
 ]
 
@@ -177,6 +178,6 @@ def declare_toolchains(
                     "@rules_rust//rust/toolchain/channel:" + channel,
                 ],
                 toolchain = rust_toolchain_name,
-                toolchain_type = "@rules_rust//rust:toolchain",
+                toolchain_type = "@rules_rust//rust:toolchain_type",
                 visibility = ["//visibility:public"],
             )

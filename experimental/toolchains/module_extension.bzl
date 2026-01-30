@@ -31,11 +31,12 @@ _REQUESTED_TARGET_TRIPLES = [
 ]
 
 _EXEC_CONFIGS = [
-    ("linux_x86_64", "x86_64-unknown-linux-gnu"),
-    ("linux_aarch64", "aarch64-unknown-linux-gnu"),
-    ("windows_x86_64", "x86_64-pc-windows-msvc"),
-    ("windows_aarch64", "aarch64-pc-windows-msvc"),
-    ("macos_aarch64", "aarch64-apple-darwin"),
+    struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "x86_64"),
+    struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "aarch64"),
+    struct(name = "windows_x86_64", exec_triple = "x86_64-pc-windows-msvc", exec_os = "windows", exec_cpu = "x86_64"),
+    struct(name = "windows_aarch64", exec_triple = "aarch64-pc-windows-msvc", exec_os = "windows", exec_cpu = "aarch64"),
+    struct(name = "macos_x86_64", exec_triple = "x86_64-apple-darwin", exec_os = "macos", exec_cpu = "x86_64"),
+    struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin", exec_os = "macos", exec_cpu = "aarch64"),
 ]
 
 _STD_TARGET_TRIPLES = [
@@ -43,6 +44,22 @@ _STD_TARGET_TRIPLES = [
     for t in SUPPORTED_PLATFORM_TRIPLES
     if t in _REQUESTED_TARGET_TRIPLES
 ]
+
+def _normalize_os_name(os_name):
+    os_name = os_name.lower()
+    if os_name.startswith("mac os"):
+        return "macos"
+    if os_name.startswith("windows"):
+        return "windows"
+    return os_name
+
+def _normalize_arch_name(arch):
+    arch = arch.lower()
+    if arch in ("amd64", "x86_64", "x64"):
+        return "x86_64"
+    if arch in ("aarch64", "arm64"):
+        return "aarch64"
+    return arch
 
 def _rust_toolchain_artifacts_impl(ctx):
     sha256s = dict(ctx.attr.sha256s)
@@ -93,7 +110,6 @@ def _rust_toolchain_artifacts_impl(ctx):
     build_parts.extend([rustc_content, clippy_content, cargo_content, rustfmt_content])
     sha256s.update(rustc_sha | clippy_sha | cargo_sha | rustfmt_sha)
 
-    ctx.file("WORKSPACE.bazel", 'workspace(name = "{}")'.format(ctx.name))
     ctx.file("BUILD.bazel", "\n\n".join(build_parts))
     ctx.file(ctx.name, "")
 
@@ -125,7 +141,6 @@ def _rust_stdlib_repo_impl(ctx):
     )
     sha256s.update(stdlib_sha)
 
-    ctx.file("WORKSPACE.bazel", 'workspace(name = "{}")'.format(ctx.name))
     ctx.file("BUILD.bazel", stdlib_content)
     ctx.file(ctx.name, "")
 
@@ -136,6 +151,26 @@ rust_stdlib_artifacts = repository_rule(
         "version": attr.string(mandatory = True),
         "sha256s": attr.string_dict(),
         "urls": attr.string_list(default = DEFAULT_STATIC_RUST_URL_TEMPLATES),
+    },
+)
+
+def _host_tools_repo_impl(ctx):
+    ctx.file("BUILD.bazel", 'exports_files(["defs.bzl"])')
+    ctx.file(
+        "defs.bzl",
+        """\
+RS_HOST_CARGO_LABEL = Label("@{repo}//:bin/cargo")
+RS_HOST_CARGO_CLIPPY_LABEL = Label("@{repo}//:bin/cargo-clippy")
+RS_HOST_CLIPPY_DRIVER_LABEL = Label("@{repo}//:bin/clippy-driver")
+RS_HOST_RUSTC_LABEL = Label("@{repo}//:bin/rustc")
+RS_HOST_RUSTFMT_LABEL = Label("@{repo}//:bin/rustfmt")
+""".format(repo = ctx.attr.repo),
+    )
+
+_host_tools_repo = repository_rule(
+    implementation = _host_tools_repo_impl,
+    attrs = {
+        "repo": attr.string(mandatory = True),
     },
 )
 
@@ -153,21 +188,37 @@ _TOOLCHAIN_TAG = tag_class(
 )
 
 def _toolchains_impl(module_ctx):
-    versions_and_editions = []
+    versions = {}
+    version_order = []
     for mod in module_ctx.modules:
         for tag in mod.tags.toolchain:
-            versions_and_editions.append((tag.version, tag.edition))
+            if tag.version in versions:
+                # TODO(zbarsky): wtf slop
+                if versions[tag.version] != tag.edition:
+                    fail("Conflicting editions requested for Rust {}: {} vs {}".format(
+                        tag.version,
+                        versions[tag.version],
+                        tag.edition,
+                    ))
+                continue
 
-    if not versions_and_editions:
-        versions_and_editions = [(_DEFAULT_RUSTC_VERSION, _DEFAULT_RUSTC_VERSION)]
+            versions[tag.version] = tag.edition
+            version_order.append(tag.version)
 
-    for version, edition in versions_and_editions:
+    if not version_order:
+        versions[_DEFAULT_RUSTC_VERSION] = _DEFAULT_RUSTC_VERSION
+        version_order.append(_DEFAULT_RUSTC_VERSION)
+
+    host_tools_version_key = sanitize_version(version_order[0])
+
+    for version in version_order:
+        edition = versions[version]
         version_key = sanitize_version(version)
 
-        for name, exec_triple in _EXEC_CONFIGS:
+        for config in _EXEC_CONFIGS:
             rust_toolchain_artifacts(
-                name = "rust_toolchain_artifacts_{}_{}".format(name, version_key),
-                exec_triple = exec_triple,
+                name = "rust_toolchain_artifacts_{}_{}".format(config.name, version_key),
+                exec_triple = config.exec_triple,
                 version = version,
             )
 
@@ -188,6 +239,22 @@ def _toolchains_impl(module_ctx):
             version = version,
             edition = edition,
         )
+
+    exec_repo_map = {
+        "{}-{}".format(config.exec_os, config.exec_cpu): "rust_toolchain_artifacts_{}_{}".format(config.name, host_tools_version_key)
+        for config in _EXEC_CONFIGS
+    }
+
+    host_os = _normalize_os_name(module_ctx.os.name)
+    host_arch = _normalize_arch_name(module_ctx.os.arch)
+    host_repo = exec_repo_map.get("{}-{}".format(host_os, host_arch))
+    if not host_repo:
+        fail("Unsupported host platform {} {}".format(host_os, host_arch))
+
+    _host_tools_repo(
+        name = "rs_rust_host_tools",
+        repo = host_repo,
+    )
 
 toolchains = module_extension(
     implementation = _toolchains_impl,
