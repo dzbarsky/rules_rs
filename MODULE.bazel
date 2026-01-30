@@ -41,10 +41,27 @@ bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")
 bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
 bazel_dep(name = "aspect_tools_telemetry", version = "0.3.2")
 
 tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")
 use_repo(tel, "aspect_tools_telemetry_report")
+
+toolchain_artifacts = use_repo_rule("//experimental/toolchains:declare_toolchains.bzl", "rust_toolchain_artifacts")
+
+[
+    toolchain_artifacts(
+        name = "rust_toolchain_artifacts_" + name,
+        exec_triple = exec_triple,
+    )
+    for name, exec_triple in [
+        ("linux_x86_64", "x86_64-unknown-linux-gnu"),
+        ("linux_aarch64", "aarch64-unknown-linux-gnu"),
+        ("windows_x86_64", "x86_64-pc-windows-msvc"),
+        ("windows_aarch64", "aarch64-pc-windows-msvc"),
+        ("macos_aarch64", "aarch64-apple-darwin"),
+    ]
+]
 
 bazel_dep(name = "rules_go", version = "0.59.0", dev_dependency = True)
 bazel_dep(name = "gazelle", version = "0.47.0", dev_dependency = True)

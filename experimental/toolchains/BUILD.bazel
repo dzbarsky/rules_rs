@@ -1,0 +1,5 @@
+load("//experimental/toolchains:declare_toolchains.bzl", "declare_toolchains")
+
+package(default_visibility = ["//visibility:public"])
+
+declare_toolchains()
