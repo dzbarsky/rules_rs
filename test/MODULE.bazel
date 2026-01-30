@@ -1,11 +1,5 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.3.1")
-archive_override(
-    module_name = "toolchains_llvm_bootstrapped",
-    integrity = "sha256-es2Zf7dKYEVDuvkm6E90CnunXSisameDh5/5nyhyu2Q=",
-    strip_prefix = "toolchains_llvm_bootstrapped-873b8be7d416283761b158ef4635e605970ab3db",
-    urls = ["https://github.com/cerisier/toolchains_llvm_bootstrapped/archive/873b8be7d416283761b158ef4635e605970ab3db.tar.gz"],
-)
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
 
 osx = use_extension("@toolchains_llvm_bootstrapped//toolchain/extension:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
