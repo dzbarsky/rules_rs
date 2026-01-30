@@ -4,7 +4,17 @@ module(
     name = "rules_rs",
 )
 
-bazel_dep(name = "rules_rust", version = "0.66.0")
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "rules_rust",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.68.1/rules_rust-0.68.1.tar.gz"],
+    patch_strip = 1,
+    patches = [
+        "//patches:rules_rust.patch",
+        "//patches:rules_rust_windows_gnu.patch",
+    ],
+)
 
 # TODO(zbarsky): A bit unfortunate that we need to define a new set of host tools instead of reusing the existing one pulled in by rules_rust.
 # Can we figure out how to access that? Perhaps add an alias?
@@ -41,8 +51,10 @@ bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")
 bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
 bazel_dep(name = "aspect_tools_telemetry", version = "0.3.2")
+bazel_dep(name = "apple_support", repo_name = "build_bazel_apple_support", version = "1.24.2")
 
 tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")
 use_repo(tel, "aspect_tools_telemetry_report")

@@ -112,7 +112,7 @@ def generate_build_file(rctx, cargo_toml):
 
     build_content = \
 """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rs//rs:defs.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(

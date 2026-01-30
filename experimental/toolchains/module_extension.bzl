@@ -21,6 +21,14 @@ load("//experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "saniti
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"
 
+_REQUESTED_TARGET_TRIPLES = [
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+]
 
 _EXEC_CONFIGS = [
     ("linux_x86_64", "x86_64-unknown-linux-gnu"),
@@ -33,7 +41,7 @@ _EXEC_CONFIGS = [
 _STD_TARGET_TRIPLES = [
     t
     for t in SUPPORTED_PLATFORM_TRIPLES
-    if t != "wasm64-unknown-unknown"
+    if t in _REQUESTED_TARGET_TRIPLES
 ]
 
 def _rust_toolchain_artifacts_impl(ctx):

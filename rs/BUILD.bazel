@@ -26,3 +26,9 @@ filegroup(
     srcs = ["rust_crate.bzl"],
     visibility = ["//visibility:public"],
 )
+
+bzl_library(
+    name = "defs",
+    srcs = ["defs.bzl"],
+    visibility = ["//visibility:public"],
+)

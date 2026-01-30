@@ -16,19 +16,30 @@ load("@toolchains_llvm_bootstrapped//constraints/libc:libc_versions.bzl", "DEFAU
 load("//experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 _EXEC_CONFIGS = [
-    struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-gnu"),
-    struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-gnu"),
-    struct(name = "windows_x86_64", exec_triple = "x86_64-pc-windows-msvc"),
-    struct(name = "windows_aarch64", exec_triple = "aarch64-pc-windows-msvc"),
-    struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin"),
+    struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "x86_64"),
+    struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "aarch64"),
+    struct(name = "windows_x86_64", exec_triple = "x86_64-pc-windows-msvc", exec_os = "windows", exec_cpu = "x86_64"),
+    struct(name = "windows_aarch64", exec_triple = "aarch64-pc-windows-msvc", exec_os = "windows", exec_cpu = "aarch64"),
+    struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin", exec_os = "macos", exec_cpu = "aarch64"),
+]
+
+_REQUESTED_TARGET_TRIPLES = [
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "x86_64-apple-darwin",
 ]
 
 # wasm64 does not provide a stdlib artifact today, so skip it for std downloads.
 _STD_TARGET_TRIPLES = [
     t
     for t in SUPPORTED_PLATFORM_TRIPLES
-    if t != "wasm64-unknown-unknown"
+    if t in _REQUESTED_TARGET_TRIPLES
 ]
+
+SUPPORTED_TARGETS = _STD_TARGET_TRIPLES
 
 def _libc_constraint(target_triple):
     t = triple(target_triple)
@@ -44,16 +55,6 @@ def _constraints_for_triple(target_triple):
     if libc and libc not in constraints:
         constraints.append(libc)
     return constraints
-
-def _select_map(triples, value_fn):
-    """Return a select map keyed by config_settings for triples."""
-    first = triples[0]
-    return {
-        "//experimental/toolchains:cfg_{}".format(sanitize_triple(triple)): value_fn(triple)
-        for triple in triples
-    } | {
-        "//conditions:default": value_fn(first),
-    }
 
 def _toolchain_declarations_repo_impl(ctx):
     ctx.file("WORKSPACE.bazel", 'workspace(name = "{}")'.format(ctx.name))
@@ -87,13 +88,7 @@ def _channel(version):
         return "beta"
     return "stable"
 
-SUPPORTED_EXECS = [
-    ("macos", "aarch64"),
-    ("linux", "x86_64"),
-    ("linux", "aarch64"),
-    ("windows", "x86_64"),
-    ("windows", "aarch64"),
-]
+SUPPORTED_EXECS = _EXEC_CONFIGS
 
 def declare_toolchains(
     *,
@@ -104,7 +99,7 @@ def declare_toolchains(
 
     """Declare toolchains for all supported target platforms."""
 
-    for target_triple in _STD_TARGET_TRIPLES:
+    for target_triple in targets:
         native.config_setting(
             name = "cfg_{}".format(sanitize_triple(target_triple)),
             constraint_values = _constraints_for_triple(target_triple),
@@ -113,70 +108,69 @@ def declare_toolchains(
     channel = _channel(version)
     version_key = sanitize_version(version)
 
-    for (exec_os, exec_cpu) in execs:
+    for config in execs:
         repo_name = "rust_toolchain_artifacts_{}_{}".format(config.name, version_key)
         repo_label = "@{}//:".format(repo_name)
 
-        rust_std_select = _select_map(
-            _STD_TARGET_TRIPLES,
-            lambda t: "@rust_stdlib_{}_{}//:rust_std-{}".format(sanitize_triple(t), version_key, t),
-        )
+        for target_triple in targets:
+            target_key = sanitize_triple(target_triple)
+            rust_std_label = "@rust_stdlib_{}_{}//:rust_std-{}".format(target_key, version_key, target_triple)
+            rust_toolchain_name = "{}_{}_{}_{}_rust_toolchain".format(
+                config.exec_os,
+                config.exec_cpu,
+                target_key,
+                version_key,
+            )
 
-        rust_toolchain_name = "{}_{}_{}_rust_toolchain".format(exec_os, exec_cpu, version_key)
+            rust_toolchain(
+                name = rust_toolchain_name,
+                rust_doc = "{}rustdoc".format(repo_label),
+                rust_std = rust_std_label,
+                rustc = "{}rustc".format(repo_label),
+                rustfmt = "{}rustfmt_bin".format(repo_label),
+                cargo = "{}cargo".format(repo_label),
+                clippy_driver = "{}clippy_driver_bin".format(repo_label),
+                cargo_clippy = "{}cargo_clippy_bin".format(repo_label),
+                # TODO(zbarsky): Enable these once we ship them.
+                #llvm_cov = "@toolchains_llvm_bootstrapped//tools:llvm-cov",
+                #llvm_profdata = "@toolchains_llvm_bootstrapped//tools:llvm-profdata",
+                rustc_lib = "{}rustc_lib".format(repo_label),
+                allocator_library = None,
+                global_allocator_library = None,
+                binary_ext = select({
+                    "@platforms//os:none": ".wasm",
+                    "@platforms//os:windows": ".exe",
+                    "//conditions:default": "",
+                }),
+                staticlib_ext = select({
+                    "@platforms//os:none": "",
+                    "@platforms//os:windows": ".lib",
+                    "//conditions:default": ".a",
+                }),
+                dylib_ext = select({
+                    "@platforms//os:none": "",
+                    "@platforms//os:windows": ".dll",
+                    "@platforms//os:macos": ".dylib",
+                    "//conditions:default": ".so",
+                }),
+                stdlib_linkflags = select({
+                    "@platforms//os:freebsd": ["-lexecinfo", "-lpthread"],
+                    "@platforms//os:macos": ["-lSystem", "-lresolv"],
+                    # TODO: windows
+                    "//conditions:default": [],
+                }),
+                default_edition = edition,
+                exec_triple = config.exec_triple,
+                target_triple = target_triple,
+                visibility = ["//visibility:public"],
+                tags = ["rust_version={}".format(version)],
+            )
 
-        rust_toolchain(
-            name = rust_toolchain_name,
-            rust_doc = "{}rustdoc".format(repo_label),
-            rust_std = select(rust_std_select),
-            rustc = "{}rustc".format(repo_label),
-            rustfmt = "{}rustfmt_bin".format(repo_label),
-            cargo = "{}cargo".format(repo_label),
-            clippy_driver = "{}clippy_driver_bin".format(repo_label),
-            cargo_clippy = "{}cargo_clippy_bin".format(repo_label),
-            # TODO(zbarsky): Enable these once we ship them.
-            #llvm_cov = "@toolchains_llvm_bootstrapped//tools:llvm-cov",
-            #llvm_profdata = "@toolchains_llvm_bootstrapped//tools:llvm-profdata",
-            rustc_lib = "{}rustc_lib".format(repo_label),
-            allocator_library = None,
-            global_allocator_library = None,
-            binary_ext = select({
-                "@platforms//os:none": ".wasm",
-                "@platforms//os:windows": ".exe",
-                "//conditions:default": "",
-            }),
-            staticlib_ext = select({
-                "@platforms//os:none": "",
-                "@platforms//os:windows": ".lib",
-                "//conditions:default": ".a",
-            }),
-            dylib_ext = select({
-                "@platforms//os:none": "",
-                "@platforms//os:windows": ".dll",
-                "@platforms//os:macos": ".dylib",
-                "//conditions:default": ".so",
-            }),
-            stdlib_linkflags = select({
-                "@platforms//os:freebsd": ["-lexecinfo", "-lpthread"],
-                "@platforms//os:macos": ["-lSystem", "-lresolv"],
-                # TODO: windows
-                "//conditions:default": [],
-            }),
-            default_edition = edition,
-            exec_triple = config.exec_triple,
-            target_triple = _select_map(
-                SUPPORTED_PLATFORM_TRIPLES,
-                lambda t: t,
-            ),
-            visibility = ["//visibility:public"],
-            tags = ["rust_version={}".format(version)],
-        )
-
-        for target_triple in _STD_TARGET_TRIPLES:
             native.toolchain(
-                name = "{}_{}_to_{}_{}".format(exec_os, exec_cpu, sanitize_triple(target_triple), version_key),
+                name = "{}_{}_to_{}_{}".format(config.exec_os, config.exec_cpu, target_key, version_key),
                 exec_compatible_with = [
-                    "@platforms//os:" + exec_os,
-                    "@platforms//cpu:" + exec_cpu,
+                    "@platforms//os:" + config.exec_os,
+                    "@platforms//cpu:" + config.exec_cpu,
                 ],
                 target_compatible_with = _constraints_for_triple(target_triple),
                 target_settings = [

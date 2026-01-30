@@ -1,5 +1,12 @@
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
+bazel_dep(name = "apple_support", repo_name = "build_bazel_apple_support", version = "1.24.2")
+
+single_version_override(
+    module_name = "toolchains_llvm_bootstrapped",
+    patch_strip = 1,
+    patches = ["//:toolchains_llvm_bootstrapped.patch"],
+)
 
 osx = use_extension("@toolchains_llvm_bootstrapped//toolchain/extension:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
@@ -7,6 +14,7 @@ osx.framework(name = "CoreServices")
 osx.framework(name = "CFNetwork")
 osx.framework(name = "DiskArbitration")
 osx.framework(name = "IOKit")
+osx.framework(name = "SystemConfiguration")
 osx.framework(name = "Security")
 
 #local_path_override(
@@ -21,7 +29,6 @@ register_toolchains(
 bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "bazel_lib", version = "3.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.16")
-bazel_dep(name = "rules_rust", version = "0.68.1")
 bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
 single_version_override(
     module_name = "nasm",
@@ -29,27 +36,13 @@ single_version_override(
     patches = ["//:nasm-musl.patch"],
 )
 
-single_version_override(
-    module_name = "rules_rust",
-    patch_strip = 1,
-    patches = [
-        "//:rules_rust.patch",
-        "//:rules_rust_windows_gnu.patch",
-    ],
-)
-
-#local_path_override(
-#    module_name = "rules_rust",
-#    path = "../../rules_rust",
-#)
-
-rust = use_extension("//experimental/toolchains:module_extension.bzl", "rust")
-rust.toolchain(
+rust_toolchains = use_extension("@rules_rs//experimental/toolchains:module_extension.bzl", "toolchains")
+rust_toolchains.toolchain(
     edition = "2024",
     version = "1.92.0",
 )
 use_repo(
-    rust,
+    rust_toolchains,
     "experimental_rust_toolchains_1_92_0",
 )
 
@@ -97,10 +90,8 @@ TESTS = [
         platform_triples = [
             "aarch64-unknown-linux-musl",
             "aarch64-apple-darwin",
-            "aarch64-pc-windows-gnullvm",
             "x86_64-unknown-linux-musl",
             "x86_64-apple-darwin",
-            "x86_64-pc-windows-gnullvm",
         ],
     )
     for test in TESTS
@@ -132,6 +123,30 @@ crate.annotation(
 crate.annotation(
     crate = "protoc-gen-prost",
     gen_binaries = ["protoc-gen-prost"],
+)
+
+crate.annotation(
+    crate = "dlopen2",
+    crate_features = [
+        "default",
+        "derive",
+        "dlopen2_derive",
+        "symbor",
+        "wrapper",
+    ],
+)
+
+crate.annotation(
+    crate = "blake3",
+    crate_features = ["pure"],
+)
+
+crate.annotation(
+    crate = "curve25519-dalek",
+    deps = [
+        "@many_workspace_deps//:cpufeatures-0.2.17",
+        "@many_workspace_deps//:curve25519-dalek-derive-0.1.1",
+    ],
 )
 
 # Fix readme inclusions
@@ -170,6 +185,12 @@ crate.annotation(
 inject_repo(crate, "bzip2")
 
 bazel_dep(name = "glib", version = "2.82.2.bcr.7")
+
+single_version_override(
+    module_name = "libffi",
+    patch_strip = 1,
+    patches = ["//:libffi-aarch64.patch"],
+)
 
 crate.annotation(
     crate = "gio-sys",
