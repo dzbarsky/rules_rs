@@ -43,24 +43,17 @@ single_version_override(
 #    path = "../../rules_rust",
 #)
 
-RUST_TRIPLES = [
-    "aarch64-unknown-linux-musl",
-    "aarch64-apple-darwin",
-    "aarch64-pc-windows-gnullvm",
-    "x86_64-unknown-linux-musl",
-    "x86_64-apple-darwin",
-    "x86_64-pc-windows-gnullvm",
-]
-
-rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust = use_extension("//experimental/toolchains:module_extension.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    extra_target_triples = RUST_TRIPLES,
-    versions = ["1.89.0"],
+    version = "1.92.0",
 )
-use_repo(rust, "rust_toolchains")
+use_repo(
+    rust,
+    "experimental_rust_toolchains_1_92_0",
+)
 
-register_toolchains("@rust_toolchains//:all")
+register_toolchains("@experimental_rust_toolchains_1_92_0//:all")
 
 bazel_dep(name = "rules_rs", version = "0.0.0")
 local_path_override(
@@ -101,7 +94,14 @@ TESTS = [
         # cargo_config = "//:.cargo/config.toml",
         # use_home_cargo_credentials = True,
         #debug = True,
-        platform_triples = RUST_TRIPLES,
+        platform_triples = [
+            "aarch64-unknown-linux-musl",
+            "aarch64-apple-darwin",
+            "aarch64-pc-windows-gnullvm",
+            "x86_64-unknown-linux-musl",
+            "x86_64-apple-darwin",
+            "x86_64-pc-windows-gnullvm",
+        ],
     )
     for test in TESTS
 ]

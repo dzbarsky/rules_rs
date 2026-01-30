@@ -1,5 +1,7 @@
-load("//experimental/toolchains:declare_toolchains.bzl", "declare_toolchains")
-
 package(default_visibility = ["//visibility:public"])
 
-declare_toolchains()
+exports_files([
+    "declare_toolchains.bzl",
+    "module_extension.bzl",
+    "toolchain_utils.bzl",
+])
