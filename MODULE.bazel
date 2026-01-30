@@ -16,6 +16,15 @@ http_archive(
     ],
 )
 
+http_archive(
+    name = "rules_rust_tinyjson",
+    sha256 = "9ab95735ea2c8fd51154d01e39cf13912a78071c2d89abc49a7ef102a7dd725a",
+    url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
+    strip_prefix = "tinyjson-2.5.1",
+    type = "tar.gz",
+    build_file = "@rules_rust//util/process_wrapper:BUILD.tinyjson.bazel",
+)
+
 toolchains = use_extension("//experimental/toolchains:module_extension.bzl", "toolchains")
 use_repo(
     toolchains,

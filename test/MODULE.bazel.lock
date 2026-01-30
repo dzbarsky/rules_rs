@@ -640,7 +640,7 @@
     },
     "@@rules_rs+//experimental/toolchains:module_extension.bzl%toolchains": {
       "general": {
-        "bzlTransitiveDigest": "R6Y+RNO37sG6xIhiFOtHM7TB1uXID2j2zfK5iwMKl3A=",
+        "bzlTransitiveDigest": "aCmIh68FZrm7r3kdEJFi1ewLmgNuii3OTdKC5okI9E0=",
         "usagesDigest": "naZa2i2WkfzpRJIcCBQb4w86dysHnxOOxx0DmTQVPFg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
@@ -660,14 +660,14 @@
           "rust_toolchain_artifacts_linux_x86_64_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
             "attributes": {
-              "exec_triple": "x86_64-unknown-linux-musl",
+              "exec_triple": "x86_64-unknown-linux-gnu",
               "version": "1.92.0"
             }
           },
           "rust_toolchain_artifacts_linux_aarch64_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_toolchain_artifacts",
             "attributes": {
-              "exec_triple": "aarch64-unknown-linux-musl",
+              "exec_triple": "aarch64-unknown-linux-gnu",
               "version": "1.92.0"
             }
           },
@@ -706,10 +706,24 @@
               "version": "1.92.0"
             }
           },
+          "rust_stdlib_aarch64_unknown_linux_gnu_1_92_0": {
+            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
+            "attributes": {
+              "target_triple": "aarch64-unknown-linux-gnu",
+              "version": "1.92.0"
+            }
+          },
           "rust_stdlib_x86_64_apple_darwin_1_92_0": {
             "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
             "attributes": {
               "target_triple": "x86_64-apple-darwin",
+              "version": "1.92.0"
+            }
+          },
+          "rust_stdlib_x86_64_unknown_linux_gnu_1_92_0": {
+            "repoRuleId": "@@rules_rs+//experimental/toolchains:module_extension.bzl%rust_stdlib_artifacts",
+            "attributes": {
+              "target_triple": "x86_64-unknown-linux-gnu",
               "version": "1.92.0"
             }
           },
