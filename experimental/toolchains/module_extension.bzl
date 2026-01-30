@@ -61,15 +61,15 @@ def _normalize_arch_name(arch):
         return "aarch64"
     return arch
 
-def _rust_toolchain_artifacts_impl(ctx):
-    sha256s = dict(ctx.attr.sha256s)
+def _rust_toolchain_artifacts_impl(rctx):
+    sha256s = dict(rctx.attr.sha256s)
     iso_date = None
-    version = ctx.attr.version
+    version = rctx.attr.version
     if "/" in version:
         version, iso_date = version.split("/", 1)
     check_version_valid(version, iso_date)
 
-    rustfmt_version = ctx.attr.rustfmt_version or version
+    rustfmt_version = rctx.attr.rustfmt_version or version
     rustfmt_iso_date = None
     if "/" in rustfmt_version:
         rustfmt_version, rustfmt_iso_date = rustfmt_version.split("/", 1)
@@ -78,30 +78,30 @@ def _rust_toolchain_artifacts_impl(ctx):
             fail("rustfmt_version requires an iso_date for nightly/beta")
         rustfmt_iso_date = iso_date
 
-    exec_triple = triple(ctx.attr.exec_triple)
+    exec_triple = triple(rctx.attr.exec_triple)
     build_parts = []
 
     # TODO(zbarsky): Can we avoid some of these other tools...
     rustc_content, rustc_sha = load_rust_compiler(
-        ctx = ctx,
+        ctx = rctx,
         iso_date = iso_date,
         target_triple = exec_triple,
         version = version,
     )
     clippy_content, clippy_sha = load_clippy(
-        ctx = ctx,
+        ctx = rctx,
         iso_date = iso_date,
         target_triple = exec_triple,
         version = version,
     )
     cargo_content, cargo_sha = load_cargo(
-        ctx = ctx,
+        ctx = rctx,
         iso_date = iso_date,
         target_triple = exec_triple,
         version = version,
     )
     rustfmt_content, rustfmt_sha = load_rustfmt(
-        ctx = ctx,
+        ctx = rctx,
         target_triple = exec_triple,
         version = rustfmt_version,
         iso_date = rustfmt_iso_date,
@@ -110,8 +110,10 @@ def _rust_toolchain_artifacts_impl(ctx):
     build_parts.extend([rustc_content, clippy_content, cargo_content, rustfmt_content])
     sha256s.update(rustc_sha | clippy_sha | cargo_sha | rustfmt_sha)
 
-    ctx.file("BUILD.bazel", "\n\n".join(build_parts))
-    ctx.file(ctx.name, "")
+    rctx.file("BUILD.bazel", "\n\n".join(build_parts))
+    rctx.file(rctx.name, "")
+
+    return rctx.repo_metadata(reproducible = True)
 
 rust_toolchain_artifacts = repository_rule(
     implementation = _rust_toolchain_artifacts_impl,
@@ -124,25 +126,27 @@ rust_toolchain_artifacts = repository_rule(
     },
 )
 
-def _rust_stdlib_repo_impl(ctx):
-    sha256s = dict(ctx.attr.sha256s)
+def _rust_stdlib_repo_impl(rctx):
+    sha256s = dict(rctx.attr.sha256s)
     iso_date = None
-    version = ctx.attr.version
+    version = rctx.attr.version
     if "/" in version:
         version, iso_date = version.split("/", 1)
     check_version_valid(version, iso_date)
 
-    target = triple(ctx.attr.target_triple)
+    target = triple(rctx.attr.target_triple)
     stdlib_content, stdlib_sha = load_rust_stdlib(
-        ctx = ctx,
+        ctx = rctx,
         target_triple = target,
         version = version,
         iso_date = iso_date,
     )
     sha256s.update(stdlib_sha)
 
-    ctx.file("BUILD.bazel", stdlib_content)
-    ctx.file(ctx.name, "")
+    rctx.file("BUILD.bazel", stdlib_content)
+    rctx.file(rctx.name, "")
+
+    return rctx.repo_metadata(reproducible = True)
 
 rust_stdlib_artifacts = repository_rule(
     implementation = _rust_stdlib_repo_impl,
@@ -154,9 +158,9 @@ rust_stdlib_artifacts = repository_rule(
     },
 )
 
-def _host_tools_repo_impl(ctx):
-    ctx.file("BUILD.bazel", 'exports_files(["defs.bzl"])')
-    ctx.file(
+def _host_tools_repo_impl(rctx):
+    rctx.file("BUILD.bazel", 'exports_files(["defs.bzl"])')
+    rctx.file(
         "defs.bzl",
         """\
 RS_HOST_CARGO_LABEL = Label("@{repo}//:bin/cargo")
@@ -164,7 +168,7 @@ RS_HOST_CARGO_CLIPPY_LABEL = Label("@{repo}//:bin/cargo-clippy")
 RS_HOST_CLIPPY_DRIVER_LABEL = Label("@{repo}//:bin/clippy-driver")
 RS_HOST_RUSTC_LABEL = Label("@{repo}//:bin/rustc")
 RS_HOST_RUSTFMT_LABEL = Label("@{repo}//:bin/rustfmt")
-""".format(repo = ctx.attr.repo),
+""".format(repo = rctx.attr.repo),
     )
 
 _host_tools_repo = repository_rule(
@@ -187,10 +191,10 @@ _TOOLCHAIN_TAG = tag_class(
     },
 )
 
-def _toolchains_impl(module_ctx):
+def _toolchains_impl(mctx):
     versions = {}
     version_order = []
-    for mod in module_ctx.modules:
+    for mod in mctx.modules:
         for tag in mod.tags.toolchain:
             if tag.version in versions:
                 # TODO(zbarsky): wtf slop
@@ -245,8 +249,8 @@ def _toolchains_impl(module_ctx):
         for config in _EXEC_CONFIGS
     }
 
-    host_os = _normalize_os_name(module_ctx.os.name)
-    host_arch = _normalize_arch_name(module_ctx.os.arch)
+    host_os = _normalize_os_name(mctx.os.name)
+    host_arch = _normalize_arch_name(mctx.os.arch)
     host_repo = exec_repo_map.get("{}-{}".format(host_os, host_arch))
     if not host_repo:
         fail("Unsupported host platform {} {}".format(host_os, host_arch))
@@ -255,6 +259,8 @@ def _toolchains_impl(module_ctx):
         name = "rs_rust_host_tools",
         repo = host_repo,
     )
+
+    return mctx.extension_metadata(reproducible = True)
 
 toolchains = module_extension(
     implementation = _toolchains_impl,

@@ -8,21 +8,22 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 
 http_archive(
     name = "rules_rust",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.68.1/rules_rust-0.68.1.tar.gz"],
+    integrity = "sha256-yKqAbPYGZnmsI0YyQe6ArWkiZdrQRl9RERy74wuJA1I=",
     patch_strip = 1,
     patches = [
         "//patches:rules_rust.patch",
         "//patches:rules_rust_windows_gnu.patch",
     ],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.68.1/rules_rust-0.68.1.tar.gz"],
 )
 
 http_archive(
     name = "rules_rust_tinyjson",
+    build_file = "@rules_rust//util/process_wrapper:BUILD.tinyjson.bazel",
     sha256 = "9ab95735ea2c8fd51154d01e39cf13912a78071c2d89abc49a7ef102a7dd725a",
-    url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
     strip_prefix = "tinyjson-2.5.1",
     type = "tar.gz",
-    build_file = "@rules_rust//util/process_wrapper:BUILD.tinyjson.bazel",
+    url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
 )
 
 toolchains = use_extension("//experimental/toolchains:module_extension.bzl", "toolchains")
@@ -55,10 +56,8 @@ bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.5")
 bazel_dep(name = "platforms", version = "0.0.5")
 bazel_dep(name = "rules_cc", version = "0.2.8")
-bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
 bazel_dep(name = "aspect_tools_telemetry", version = "0.3.2")
-bazel_dep(name = "apple_support", repo_name = "build_bazel_apple_support", version = "1.24.2")
 
 tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")
 use_repo(tel, "aspect_tools_telemetry_report")

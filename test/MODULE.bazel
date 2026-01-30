@@ -1,6 +1,6 @@
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.4.1")
-bazel_dep(name = "apple_support", repo_name = "build_bazel_apple_support", version = "1.24.2")
+bazel_dep(name = "apple_support", version = "1.24.2", repo_name = "build_bazel_apple_support")
 
 single_version_override(
     module_name = "toolchains_llvm_bootstrapped",
@@ -53,7 +53,6 @@ use_repo(
 )
 
 register_toolchains("@experimental_rust_toolchains_1_92_0//:all")
-
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 
@@ -125,7 +124,6 @@ crate.annotation(
     crate = "protoc-gen-prost",
     gen_binaries = ["protoc-gen-prost"],
 )
-
 crate.annotation(
     crate = "dlopen2",
     crate_features = [
@@ -136,12 +134,10 @@ crate.annotation(
         "wrapper",
     ],
 )
-
 crate.annotation(
     crate = "blake3",
     crate_features = ["pure"],
 )
-
 crate.annotation(
     crate = "curve25519-dalek",
     deps = [
