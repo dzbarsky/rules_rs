@@ -1,6 +1,6 @@
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
 load("@rules_rust//cargo/private:cargo_build_script_wrapper.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_proc_macro")
+load("//rs:defs.bzl", "rust_binary", "rust_library", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
 
 def rust_crate(

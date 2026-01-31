@@ -1,0 +1,3 @@
+load("//experimental/platforms:declare_platforms.bzl", "declare_platforms")
+
+declare_platforms()

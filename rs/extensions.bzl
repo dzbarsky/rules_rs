@@ -12,6 +12,7 @@ load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
+load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
 
 def _spoke_repo(hub_name, name, version):
     s = "%s__%s-%s" % (hub_name, name, version)
@@ -23,7 +24,7 @@ def _external_repo_for_git_source(remote, commit):
     return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
 
 def _platform(triple):
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//experimental/platforms/config:" + triple
 
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}
@@ -907,7 +908,7 @@ def _compute_workspace_fq_deps(workspace_members, versions_by_name):
 
 def _crate_impl(mctx):
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
-    cargo_path = mctx.path(Label("@rs_rust_host_tools//:bin/cargo"))
+    cargo_path = mctx.path(RS_HOST_CARGO_LABEL)
 
     # And toml2json
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
