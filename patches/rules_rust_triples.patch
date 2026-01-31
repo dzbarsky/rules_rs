@@ -1,0 +1,43 @@
+commit 5d96e88cae4e0befa0a640298cf6569b007da0ec
+Author: David Zbarsky <dzbarsky@gmail.com>
+Date:   Sat Jan 31 18:34:15 2026 -0500
+
+    Fix some triple-mapping errors
+
+diff --git a/rust/platform/triple_mappings.bzl b/rust/platform/triple_mappings.bzl
+index 85c8e3661..a0ce54142 100644
+--- a/rust/platform/triple_mappings.bzl
++++ b/rust/platform/triple_mappings.bzl
+@@ -116,8 +116,8 @@ _CPU_ARCH_TO_BUILTIN_PLAT_SUFFIX = {
+     "le32": None,
+     "mips": None,
+     "mipsel": None,
+-    "powerpc": "ppc",
+-    "powerpc64": None,
++    "powerpc": "ppc32",
++    "powerpc64": "ppc",
+     "powerpc64le": "ppc64le",
+     "riscv32": "riscv32",
+     "riscv32imc": "riscv32",
+@@ -149,7 +149,7 @@ _SYSTEM_TO_BUILTIN_SYS_SUFFIX = {
+     "linux": "linux",
+     "macos": "osx",
+     "nacl": None,
+-    "netbsd": None,
++    "netbsd": "netbsd",
+     "nixos": "nixos",
+     "none": "none",
+     "nto": "qnx",
+@@ -157,9 +157,9 @@ _SYSTEM_TO_BUILTIN_SYS_SUFFIX = {
+     "solaris": None,
+     "uefi": "uefi",
+     "unknown": None,
+-    "wasi": None,
+-    "wasip1": None,
+-    "wasip2": None,
++    "wasi": "wasi",
++    "wasip1": "wasi",
++    "wasip2": "wasi",
+     "windows": "windows",
+ }
+ 

@@ -1,9 +1,6 @@
-"Bazel dependencies"
+module(name = "rules_rs")
 
-module(
-    name = "rules_rs",
-)
-
+########### BECOME THE RULES_RUST FACADE ################
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
@@ -13,6 +10,7 @@ http_archive(
     patches = [
         "//patches:rules_rust.patch",
         "//patches:rules_rust_windows_gnu.patch",
+        "//patches:rules_rust_triples.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.68.1/rules_rust-0.68.1.tar.gz"],
 )
@@ -25,6 +23,11 @@ http_archive(
     type = "tar.gz",
     url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
 )
+
+bazel_dep(name = "apple_support", version = "1.24.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+#########################################################
 
 toolchains = use_extension("//experimental/toolchains:module_extension.bzl", "toolchains")
 use_repo(

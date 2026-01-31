@@ -1,65 +1,20 @@
 """Rust toolchain declarations driven by a macro."""
 
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
-load("@rules_rust//rust/platform:triple.bzl", "triple")
-load(
-    "@rules_rust//rust/platform:triple_mappings.bzl",
-    "SUPPORTED_PLATFORM_TRIPLES",
-    "system_to_binary_ext",
-    "system_to_dylib_ext",
-    "system_to_staticlib_ext",
-    "system_to_stdlib_linkflags",
-    "triple_to_constraint_set",
-)
-load("@rules_rust//rust/private:repository_utils.bzl", "DEFAULT_STATIC_RUST_URL_TEMPLATES")
-load("@toolchains_llvm_bootstrapped//constraints/libc:libc_versions.bzl", "DEFAULT_LIBC")
 load("//experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
+load("//experimental/platforms:triples.bzl", "triple_to_constraint_set", "SUPPORTED_TARGET_TRIPLES")
 
 _EXEC_CONFIGS = [
-    struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "x86_64"),
-    struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "aarch64"),
+    struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-musl", exec_os = "linux", exec_cpu = "x86_64"),
+    struct(name = "linux_aarch64", exec_triple = "aarch64-unknown-linux-musl", exec_os = "linux", exec_cpu = "aarch64"),
     struct(name = "windows_x86_64", exec_triple = "x86_64-pc-windows-msvc", exec_os = "windows", exec_cpu = "x86_64"),
     struct(name = "windows_aarch64", exec_triple = "aarch64-pc-windows-msvc", exec_os = "windows", exec_cpu = "aarch64"),
     struct(name = "macos_x86_64", exec_triple = "x86_64-apple-darwin", exec_os = "macos", exec_cpu = "x86_64"),
     struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin", exec_os = "macos", exec_cpu = "aarch64"),
 ]
 
-_REQUESTED_TARGET_TRIPLES = [
-    "aarch64-unknown-linux-gnu",
-    "aarch64-unknown-linux-musl",
-    "aarch64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
-    "x86_64-apple-darwin",
-]
-
-# wasm64 does not provide a stdlib artifact today, so skip it for std downloads.
-_STD_TARGET_TRIPLES = [
-    t
-    for t in SUPPORTED_PLATFORM_TRIPLES
-    if t in _REQUESTED_TARGET_TRIPLES
-]
-
-SUPPORTED_TARGETS = _STD_TARGET_TRIPLES
-
-def _libc_constraint(target_triple):
-    t = triple(target_triple)
-    if t.system not in ("linux", "nixos"):
-        return None
-    if t.abi == "musl" or "musl" in target_triple:
-        return "@toolchains_llvm_bootstrapped//constraints/libc:musl"
-    return "@toolchains_llvm_bootstrapped//constraints/libc:{}".format(DEFAULT_LIBC)
-
-def _constraints_for_triple(target_triple):
-    constraints = list(triple_to_constraint_set(target_triple))
-    libc = _libc_constraint(target_triple)
-    if libc and libc not in constraints:
-        constraints.append(libc)
-    return constraints
-
-def _toolchain_declarations_repo_impl(ctx):
-    ctx.file("WORKSPACE.bazel", 'workspace(name = "{}")'.format(ctx.name))
-    ctx.file(
+def _toolchain_declarations_repo_impl(rctx):
+    rctx.file(
         "BUILD.bazel",
         """\
 load("@rules_rs//experimental/toolchains:declare_toolchains.bzl", "declare_toolchains")
@@ -69,10 +24,12 @@ declare_toolchains(
     edition = {edition},
 )
 """.format(
-            version = repr(ctx.attr.version),
-            edition = repr(ctx.attr.edition),
+            version = repr(rctx.attr.version),
+            edition = repr(rctx.attr.edition),
         ),
     )
+
+    return rctx.repo_metadata(reproducible = True)
 
 rust_toolchain_declarations = repository_rule(
     implementation = _toolchain_declarations_repo_impl,
@@ -96,18 +53,11 @@ def declare_toolchains(
     version,
     edition,
     execs = SUPPORTED_EXECS,
-    targets = SUPPORTED_TARGETS):
-
+    targets = SUPPORTED_TARGET_TRIPLES):
     """Declare toolchains for all supported target platforms."""
 
-    for target_triple in targets:
-        native.config_setting(
-            name = "cfg_{}".format(sanitize_triple(target_triple)),
-            constraint_values = _constraints_for_triple(target_triple),
-        )
-
-    channel = _channel(version)
     version_key = sanitize_version(version)
+    channel = _channel(version)
 
     for config in execs:
         repo_name = "rust_toolchain_artifacts_{}_{}".format(config.name, version_key)
@@ -173,7 +123,7 @@ def declare_toolchains(
                     "@platforms//os:" + config.exec_os,
                     "@platforms//cpu:" + config.exec_cpu,
                 ],
-                target_compatible_with = _constraints_for_triple(target_triple),
+                target_compatible_with = triple_to_constraint_set(target_triple),
                 target_settings = [
                     "@rules_rust//rust/toolchain/channel:" + channel,
                 ],

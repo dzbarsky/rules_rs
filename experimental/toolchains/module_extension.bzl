@@ -15,20 +15,12 @@ load(
     "load_rustfmt",
 )
 load("@rules_rust//rust/platform:triple.bzl", "triple")
+load("//experimental/platforms:triples.bzl", "SUPPORTED_TARGET_TRIPLES")
 load("//experimental/toolchains:declare_toolchains.bzl", "rust_toolchain_declarations")
 load("//experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"
-
-_REQUESTED_TARGET_TRIPLES = [
-    "aarch64-unknown-linux-gnu",
-    "aarch64-unknown-linux-musl",
-    "aarch64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
-    "x86_64-apple-darwin",
-]
 
 _EXEC_CONFIGS = [
     struct(name = "linux_x86_64", exec_triple = "x86_64-unknown-linux-gnu", exec_os = "linux", exec_cpu = "x86_64"),
@@ -39,11 +31,6 @@ _EXEC_CONFIGS = [
     struct(name = "macos_aarch64", exec_triple = "aarch64-apple-darwin", exec_os = "macos", exec_cpu = "aarch64"),
 ]
 
-_STD_TARGET_TRIPLES = [
-    t
-    for t in SUPPORTED_PLATFORM_TRIPLES
-    if t in _REQUESTED_TARGET_TRIPLES
-]
 
 def _normalize_os_name(os_name):
     os_name = os_name.lower()
@@ -171,6 +158,8 @@ RS_HOST_RUSTFMT_LABEL = Label("@{repo}//:bin/rustfmt")
 """.format(repo = rctx.attr.repo),
     )
 
+    return rctx.repo_metadata(reproducible = True)
+
 _host_tools_repo = repository_rule(
     implementation = _host_tools_repo_impl,
     attrs = {
@@ -227,7 +216,7 @@ def _toolchains_impl(mctx):
             )
 
         seen = {}
-        for target_triple in _STD_TARGET_TRIPLES:
+        for target_triple in SUPPORTED_TARGET_TRIPLES:
             key = sanitize_triple(target_triple)
             if key in seen:
                 continue

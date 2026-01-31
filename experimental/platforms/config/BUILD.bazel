@@ -1,0 +1,3 @@
+load("//experimental/platforms/config:declare_config_settings.bzl", "declare_config_settings")
+
+declare_config_settings()
