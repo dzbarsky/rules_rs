@@ -254,11 +254,7 @@ crate.annotation(
     version = "0.16.20",
 )
 
-bazel_dep(name = "aws-lc", version = "5.3.0-bcr.alpha.4")
-local_path_override(
-    module_name = "aws-lc",
-    path = "../../aws-lc",
-)
+bazel_dep(name = "aws-lc", version = "1.67.0")
 
 crate.annotation(
     build_script_data = [
