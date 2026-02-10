@@ -34,7 +34,6 @@ solana-client = "3.0.3"
 swc = "40.0.0"
 tantivy = "0.25.0"
 #tauri = "2.8.5" - gtk-rs components like javascriptcore-rs-sys
-tao = "0.34.3"
 tonic = "0.14.2"
 tower = "0.5.2"
 walrus = "0.23.3"
@@ -47,3 +46,5 @@ wgpu = "26.0.1"
 #wry = "0.53.3"
 yew = "0.21.0"
 
+[target.'cfg(not(windows))'.dependencies]
+tao = "0.34.3"

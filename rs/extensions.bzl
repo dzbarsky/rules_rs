@@ -451,6 +451,7 @@ def _generate_hub_and_spokes(
     workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
 
     workspace_dep_versions_by_name = {}
+    workspace_dep_labels_by_triple = {triple: set() for triple in platform_triples}
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
     watch_manifests = cargo_lock_path.repo_name == ""
@@ -515,6 +516,7 @@ def _generate_hub_and_spokes(
                 cfg_match_cache[target] = match
 
             for triple in match:
+                workspace_dep_labels_by_triple[triple].add(":" + dep_name)
                 feature_resolutions.features_enabled[triple].update(features)
 
     # Set initial set of features from annotations
@@ -708,6 +710,11 @@ alias(
     actual = ":{fq}__{binary}",
 )""".format(name = name, fq = fq, binary = binary))
 
+    workspace_deps, conditional_workspace_deps = render_select(
+        [],
+        workspace_dep_labels_by_triple,
+    )
+
     hub_contents.append(
         """
 package(
@@ -717,9 +724,12 @@ package(
 filegroup(
     name = "_workspace_deps",
     srcs = [
-       %s 
-    ],
-)""" % ",\n        ".join(['":%s"' % dep for dep in sorted(workspace_dep_versions_by_name.keys())]),
+        %s
+    ]%s,
+)""" % (
+            ",\n        ".join(['"%s"' % dep for dep in sorted(workspace_deps)]),
+            " + " + conditional_workspace_deps if conditional_workspace_deps else "",
+        ),
     )
 
     defs_bzl_contents = \

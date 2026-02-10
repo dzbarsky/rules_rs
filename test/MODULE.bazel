@@ -231,12 +231,11 @@ crate.annotation(
 
 inject_repo(crate, "alsa_lib")
 
-bazel_dep(name = "openssl", version = "3.5.4.bcr.0")
+bazel_dep(name = "openssl", version = "3.5.5.bcr.0")
 single_version_override(
     module_name = "openssl",
     patch_strip = 1,
     patches = ["//:openssl-perl-genrule.patch"],
-    version = "3.5.4.bcr.0",
 )
 
 crate.annotation(

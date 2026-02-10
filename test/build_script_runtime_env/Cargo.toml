@@ -6,5 +6,5 @@ edition = "2024"
 [lib]
 
 [dependencies]
+[target.'cfg(not(windows))'.dependencies]
 rav1e = "0.8.1"
-
