@@ -292,7 +292,6 @@ crate.annotation(
     },
     build_script_tools = ["@nasm//:nasm"],
     crate = "rav1e",
-    patch_args = ["-p1"],
     patch_tool = "patch",
     patches = ["//:rav1e-nasm-0.8.1.patch"],
     version = "0.8.1",
