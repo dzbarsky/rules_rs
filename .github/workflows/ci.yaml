@@ -125,7 +125,6 @@ jobs:
           bazel \
             --output_user_root=C:/bzl \
             --bazelrc=.bazelrc \
-            --experimental_remote_repo_contents_cache \
             test \
             --repository_cache= \
             --repo_contents_cache= \
