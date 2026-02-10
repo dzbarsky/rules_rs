@@ -1,0 +1,70 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -26,16 +26,38 @@
+     ],
+ )
+ 
++config_setting(
++    name = "macos_aarch64",
++    constraint_values = [
++        "@platforms//cpu:aarch64",
++        "@platforms//os:macos",
++    ],
++)
++
++config_setting(
++    name = "linux_aarch64",
++    constraint_values = [
++        "@platforms//cpu:aarch64",
++        "@platforms//os:linux",
++    ],
++)
++
+ expand_template(
+     name = "ffi_h",
+     out = "ffi.h",
+     substitutions = selects.with_or({
+-        "@platforms//cpu:aarch64": {
++        ":macos_aarch64": {
+             "@VERSION@": module_version(),
+             "@TARGET@": "AARCH64",
+             "@HAVE_LONG_DOUBLE@": "0",
+             "@FFI_EXEC_TRAMPOLINE_TABLE@": "1",
+         },
++        ":linux_aarch64": {
++            "@VERSION@": module_version(),
++            "@TARGET@": "AARCH64",
++            "@HAVE_LONG_DOUBLE@": "0",
++            "@FFI_EXEC_TRAMPOLINE_TABLE@": "0",
++        },
+         ("@platforms//cpu:x86_32", "@platforms//cpu:x86_64"): {
+             "@VERSION@": module_version(),
+             "@TARGET@": "X86_64",
+@@ -73,7 +95,7 @@
+             "SIZEOF_LONG_DOUBLE": "16",
+             "SYMBOL_UNDERSCORE": "1",
+         }),
+-        "@platforms//cpu:aarch64": substitutions({
++        ":macos_aarch64": substitutions({
+             "FFI_EXEC_STATIC_TRAMP": None,
+             "FFI_EXEC_TRAMPOLINE_TABLE": "1",
+             "FFI_MMAP_EXEC_WRIT": None,
+@@ -85,6 +107,18 @@
+             "SIZEOF_LONG_DOUBLE": "8",
+             "SYMBOL_UNDERSCORE": "1",
+         }),
++        ":linux_aarch64": substitutions({
++            "FFI_EXEC_STATIC_TRAMP": None,
++            "FFI_EXEC_TRAMPOLINE_TABLE": "0",
++            "FFI_MMAP_EXEC_WRIT": None,
++            "HAVE_AS_X86_64_UNWIND_SECTION_TYPE": None,
++            "HAVE_AS_X86_PCREL": None,
++            "HAVE_LONG_DOUBLE": None,
++            "HAVE_MEMFD_CREATE": None,
++            "LIBFFI_GNU_SYMBOL_VERSIONING": None,
++            "SIZEOF_LONG_DOUBLE": "8",
++            "SYMBOL_UNDERSCORE": "1",
++        }),
+         ("@platforms//cpu:x86_32", "@platforms//cpu:x86_64"): substitutions({
+             "FFI_EXEC_STATIC_TRAMP": "1",
+             "FFI_EXEC_TRAMPOLINE_TABLE": None,

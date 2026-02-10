@@ -1,0 +1,10 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -20,6 +20,7 @@
+     "//conditions:default": [
+         "-w",
+         "-DHAVE_CONFIG_H",
++        "-Iinclude",
+     ],
+ })
+ 

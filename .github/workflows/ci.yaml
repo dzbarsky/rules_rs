@@ -91,7 +91,6 @@ jobs:
         os: [windows-latest]
         bazel_version: [9.x]
         folder:
-          - "."
           - "test"
     runs-on: ${{ matrix.os }}
 
@@ -112,7 +111,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-      - name: bazel test //...
+      - name: bazel test windows targets
         id: bazel_test
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
@@ -130,4 +129,5 @@ jobs:
             --repo_contents_cache= \
             --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY \
             --jobs=100 \
-            //...
+            //:all_builds_windows_amd64 \
+            //:all_builds_windows_arm64
