@@ -12,6 +12,8 @@ on:
     secrets:
       BUILDBUDDY_API_KEY:
         required: true
+      SSH_PRIVATE_KEY:
+        required: true
 concurrency:
   # Cancel previous actions from the same PR or branch except 'main' branch.
   # See https://docs.github.com/en/actions/using-jobs/using-concurrency and https://docs.github.com/en/actions/learn-github-actions/contexts for more info.
@@ -35,6 +37,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust GitHub host key
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
 
       # Cache build and external artifacts so that the next ci build is incremental.
       # Because github action caches cannot be updated after a build, we need to
@@ -60,6 +73,7 @@ jobs:
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+          GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=yes
         working-directory: ${{ matrix.folder }}
         shell: bash
         run: |
@@ -87,11 +101,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust GitHub host key
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
       - name: bazel test //...
         id: bazel_test
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+          GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=yes
         working-directory: ${{ matrix.folder }}
         shell: bash
         run: |
