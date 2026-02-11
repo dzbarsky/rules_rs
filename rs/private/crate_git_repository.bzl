@@ -49,14 +49,17 @@ def _crate_git_repository_implementation(rctx):
     cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
     if strip_prefix:
-        workspace_cargo_toml = run_toml2json(rctx, repo_dir.get_child(rctx.attr.workspace_cargo_toml))
-        workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
-        if workspace_package:
-            crate_package = cargo_toml["package"]
-            for field in _INHERITABLE_FIELDS:
-                value = crate_package.get(field)
-                if type(value) == "dict" and value.get("workspace") == True:
-                    crate_package[field] = workspace_package.get(field)
+        workspace_cargo_toml_path = repo_dir.get_child(rctx.attr.workspace_cargo_toml)
+    else:
+        workspace_cargo_toml_path = rctx.path(rctx.attr.workspace_cargo_toml)
+    workspace_cargo_toml = run_toml2json(rctx, workspace_cargo_toml_path)
+    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
+    if workspace_package:
+        crate_package = cargo_toml["package"]
+        for field in _INHERITABLE_FIELDS:
+            value = crate_package.get(field)
+            if type(value) == "dict" and value.get("workspace") == True:
+                crate_package[field] = workspace_package.get(field)
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 
