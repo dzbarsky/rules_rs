@@ -14,6 +14,7 @@ def rust_crate(
         crate_root,
         edition,
         rustc_flags,
+        tags,
         target_compatible_with,
         links,
         build_script,
@@ -22,6 +23,7 @@ def rust_crate(
         build_script_env,
         build_script_toolchains,
         build_script_tools,
+        build_script_tags,
         is_proc_macro,
         binaries):
 
@@ -52,12 +54,14 @@ def rust_crate(
         allow_empty = True,
     )
 
-    tags = [
+    default_tags = [
         "crate-name=" + name,
         "manual",
         "noclippy",
         "norustfmt",
     ]
+    crate_tags = default_tags + tags
+    build_script_target_tags = crate_tags + build_script_tags
 
     if build_script:
         rust_deps(
@@ -93,7 +97,7 @@ def rust_crate(
             rustc_flags = ["--cap-lints=allow"],
             srcs = srcs,
             target_compatible_with = target_compatible_with,
-            tags = tags,
+            tags = build_script_target_tags,
             version = version,
         )
 
@@ -129,7 +133,7 @@ def rust_crate(
         edition = edition,
         rustc_env_files = ["cargo_toml_env_vars.env"],
         rustc_flags = rustc_flags + ["--cap-lints=allow"],
-        tags = tags,
+        tags = crate_tags,
         target_compatible_with = target_compatible_with,
         package_metadata = [name + "_package_metadata"],
         visibility = ["//visibility:public"],
@@ -153,7 +157,7 @@ def rust_crate(
             rustc_env_files = ["cargo_toml_env_vars.env"],
             rustc_flags = rustc_flags + ["--cap-lints=allow"],
             srcs = srcs,
-            tags = tags,
+            tags = crate_tags,
             target_compatible_with = target_compatible_with,
             version = version,
             visibility = ["//visibility:public"],

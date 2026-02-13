@@ -55,11 +55,38 @@ rust_binary(
     ],
 )
 
+genquery(
+    name = "openssl_sys_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
+    scope = ["@optional_build_deps//:openssl-sys"],
+)
+
+genquery(
+    name = "openssl_sys_build_script_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
+    scope = ["@optional_build_deps//:openssl-sys"],
+)
+
+genrule(
+    name = "verify_annotation_tags",
+    srcs = [
+        ":openssl_sys_has_annotation_tag",
+        ":openssl_sys_build_script_has_annotation_tag",
+    ],
+    outs = ["verify_annotation_tags.txt"],
+    cmd = """
+        test -s $(location :openssl_sys_has_annotation_tag)
+        test -s $(location :openssl_sys_build_script_has_annotation_tag)
+        echo ok > $@
+    """,
+)
+
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
         ":rust_binary",
+        ":verify_annotation_tags",
     ],
 )
 
