@@ -1,3 +1,5 @@
+module(name = "rules_rs_test")
+
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.4")
 
@@ -82,6 +84,7 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
+    "bindgen",
     "build_script_aliases",
     "build_script_env_select",
     "build_script_runtime_env",
@@ -414,6 +417,16 @@ cc_import(
     gen_build_script = "off",
     deps = [":windows_import_lib"],
 )
+
+llvm = use_extension("@toolchains_llvm_bootstrapped//extensions:llvm.bzl", "llvm")
+use_repo(llvm, "llvm-project")
+
+crate.annotation(
+    crate = "coreaudio-sys",
+    build_script_tools = ["@rules_rs_test//:clang"],
+    build_script_env = {"LIBCLANG_PATH": "$(location @rules_rs_test//:clang)"},
+)
+inject_repo(crate, "rules_rs_test")
 
 # TODO(zbarsky): fix this for realz
 crate.annotation(

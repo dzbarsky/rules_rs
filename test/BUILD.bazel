@@ -1,5 +1,12 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+cc_shared_library(
+    name = "clang",
+    deps = ["@llvm-project//clang:libclang"],
+    visibility = ["//visibility:public"],
+)
 
 DISABLED = [
     "annotation_crate_features",
