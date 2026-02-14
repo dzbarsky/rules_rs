@@ -5,5 +5,5 @@ edition = "2024"
 
 [lib]
 
-[target.'cfg(macos)'.dependencies]
-coreaudio-sys = "0.2.17"
+[target.'cfg(target_vendor = "apple")'.dependencies]
+coreaudio-rs = "0.11.3"

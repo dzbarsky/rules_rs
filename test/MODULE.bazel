@@ -8,12 +8,19 @@ osx.framework(name = "CoreFoundation")
 osx.framework(name = "CoreServices")
 osx.framework(name = "CFNetwork")
 osx.framework(name = "DiskArbitration")
+osx.framework(name = "AudioUnit")
+osx.framework(name = "AudioToolbox")
+osx.framework(name = "CoreAudio")
+osx.framework(name = "CoreAudioTypes")
+osx.framework(name = "OpenAL")
+osx.framework(name = "CoreMIDI")
 osx.framework(name = "IOKit")
 osx.framework(name = "Security")
+use_repo(osx, "macosx15.4.sdk")
 
 #local_path_override(
 #    module_name = "toolchains_llvm_bootstrapped",
-#    path = "../../toolchains_llvm_bootstrapped",
+#    path = "/Users/dzbarsky/toolchains_llvm_bootstrapped",
 #)
 
 register_toolchains(
@@ -423,10 +430,22 @@ use_repo(llvm, "llvm-project")
 
 crate.annotation(
     crate = "coreaudio-sys",
-    build_script_tools = ["@rules_rs_test//:clang"],
-    build_script_env = {"LIBCLANG_PATH": "$(location @rules_rs_test//:clang)"},
+    build_script_tools = [
+        "@rules_rs_test//:clang",
+        #"@toolchains_llvm_bootstrapped//:builtin_headers",
+        "@@toolchains_llvm_bootstrapped++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64//:builtin_headers",
+    ],
+    build_script_data = [
+        "@macosx15.4.sdk//sysroot",
+    ],
+    build_script_env = {
+        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @@toolchains_llvm_bootstrapped++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64//:builtin_headers)",
+        # "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
+        "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
+        "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
+    },
 )
-inject_repo(crate, "rules_rs_test")
+inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")
 
 # TODO(zbarsky): fix this for realz
 crate.annotation(

@@ -11,9 +11,9 @@ def _format_branches(branches):
         ",\n        ".join(['"%s": %s' % branch for branch in branches])
     )
 
-def render_select(non_platform_items, platform_items):
+def _compute_select(non_platform_items, platform_items):
     if not platform_items:
-        return non_platform_items, ""
+        return non_platform_items, {}
 
     item_values = platform_items.values()
     common_items = set(item_values[0])
@@ -24,18 +24,24 @@ def render_select(non_platform_items, platform_items):
 
     common_items.update(non_platform_items)
 
-    branches = []
+    branches = {}
 
     for triple, items in platform_items.items():
         items = set(items)
         items.difference_update(non_platform_items)
         items.difference_update(common_items)
         if items:
-            branches.append((_platform(triple), repr(sorted(items))))
+            branches[triple] = sorted(items)
+
+    return common_items, branches
+
+def render_select(non_platform_items, platform_items):
+    common_items, branches = _compute_select(non_platform_items, platform_items)
 
     if not branches:
         return common_items, ""
 
+    branches = [(_platform(k), repr(v)) for k, v in branches.items()]
     branches.append(("//conditions:default", "[],"))
 
     return common_items, _format_branches(branches)
@@ -128,7 +134,9 @@ rust_crate(
     data = [
         {data}
     ],
-    crate_features = {crate_features}{conditional_crate_features},
+    crate_features = {crate_features},
+    triples = {triples},
+    conditional_crate_features = {conditional_crate_features},
     crate_root = {crate_root},
     edition = {edition},
     rustc_flags = {rustc_flags},
@@ -154,7 +162,9 @@ rust_crate(
     build_content += attr.additive_build_file_content
     build_content += bazel_metadata.get("additive_build_file_content", "")
 
-    crate_features, conditional_crate_features = render_select(
+    # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
+    # See `rust_crate.bzl` for details.
+    crate_features, conditional_crate_features = _compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
@@ -177,7 +187,8 @@ rust_crate(
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
         data = ",\n        ".join(['"%s"' % d for d in attr.data]),
         crate_features = repr(sorted(crate_features)),
-        conditional_crate_features = " + " + conditional_crate_features if conditional_crate_features else "",
+        triples = repr(attr.crate_features_select.keys()),
+        conditional_crate_features = repr(conditional_crate_features),
         crate_root = repr(crate_root),
         edition = repr(edition),
         rustc_flags = repr(attr.rustc_flags or []),
