@@ -41,6 +41,10 @@ crate.annotation(
 
 See https://registry.bazel.build/docs/rules_rs
 
+## Users
+- [OpenAI Codex](https://github.com/openai/codex)
+- [Aspect CLI](https://github.com/aspect-build/aspect-cli)
+
 ## Telemetry & privacy policy
 
 This ruleset collects limited usage data via [`tools_telemetry`](https://github.com/aspect-build/tools_telemetry), which is reported to Aspect Build Inc and governed by their [privacy policy](https://www.aspect.build/privacy-policy).
