@@ -1,7 +1,7 @@
 module(name = "rules_rs_test")
 
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.4")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.6")
 
 osx = use_extension("@toolchains_llvm_bootstrapped//extensions:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
@@ -23,9 +23,7 @@ use_repo(osx, "macosx15.4.sdk")
 #    path = "/Users/dzbarsky/toolchains_llvm_bootstrapped",
 #)
 
-register_toolchains(
-    "@toolchains_llvm_bootstrapped//toolchain:all",
-)
+register_toolchains("@toolchains_llvm_bootstrapped//toolchain:all")
 
 bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "bazel_lib", version = "3.2.0")
@@ -429,22 +427,21 @@ llvm = use_extension("@toolchains_llvm_bootstrapped//extensions:llvm.bzl", "llvm
 use_repo(llvm, "llvm-project")
 
 crate.annotation(
-    crate = "coreaudio-sys",
-    build_script_tools = [
-        "@rules_rs_test//:clang",
-        #"@toolchains_llvm_bootstrapped//:builtin_headers",
-        "@@toolchains_llvm_bootstrapped++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64//:builtin_headers",
-    ],
     build_script_data = [
         "@macosx15.4.sdk//sysroot",
     ],
     build_script_env = {
-        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @@toolchains_llvm_bootstrapped++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64//:builtin_headers)",
-        # "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
+        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
         "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
         "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
     },
+    build_script_tools = [
+        "@rules_rs_test//:clang",
+        "@toolchains_llvm_bootstrapped//:builtin_headers",
+    ],
+    crate = "coreaudio-sys",
 )
+
 inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")
 
 # TODO(zbarsky): fix this for realz
