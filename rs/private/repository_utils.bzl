@@ -2,7 +2,7 @@
 load(":semver.bzl", "parse_full_version")
 
 def _platform(triple):
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//rs/experimental/platforms/config:" + triple
 
 def _format_branches(branches):
     return """select({
@@ -118,7 +118,7 @@ def generate_build_file(rctx, cargo_toml):
 
     build_content = \
 """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(

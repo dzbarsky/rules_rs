@@ -1,6 +1,8 @@
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
-load("@rules_rust//cargo/private:cargo_build_script_wrapper.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_proc_macro")
+load("//rs:cargo_build_script.bzl", "cargo_build_script")
+load("//rs:rust_binary.bzl", "rust_binary")
+load("//rs:rust_library.bzl", "rust_library")
+load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
 
 def _platform(triple):
