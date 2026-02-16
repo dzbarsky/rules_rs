@@ -45,6 +45,7 @@ See https://registry.bazel.build/docs/rules_rs
 - [OpenAI Codex](https://github.com/openai/codex)
 - [Aspect CLI](https://github.com/aspect-build/aspect-cli)
 - [Datadog Agent](https://github.com/DataDog/datadog-agent)
+- [ZML](https://github.com/zml/zml/tree/zml/v2)
 
 ## Telemetry & privacy policy
 
