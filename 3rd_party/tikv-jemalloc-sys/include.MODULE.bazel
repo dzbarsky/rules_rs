@@ -1,0 +1,10 @@
+bazel_dep(name = "jemalloc", version = "5.3.0-bcr.alpha.4")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "tikv-jemalloc-sys",
+    gen_build_script = "off",
+    deps = ["@jemalloc"],
+)
+
+inject_repo(crate, "jemalloc")

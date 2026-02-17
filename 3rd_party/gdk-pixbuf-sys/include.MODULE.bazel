@@ -1,0 +1,10 @@
+bazel_dep(name = "gdk-pixbuf", version = "2.44.4")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "gdk-pixbuf-sys",
+    gen_build_script = "off",
+    deps = ["@gdk-pixbuf"],
+)
+
+inject_repo(crate, "gdk-pixbuf")

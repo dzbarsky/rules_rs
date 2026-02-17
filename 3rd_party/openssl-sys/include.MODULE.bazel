@@ -1,0 +1,20 @@
+bazel_dep(name = "openssl", version = "3.5.5.bcr.0")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    build_script_data = [
+        "@openssl//:gen_dir",
+    ],
+    build_script_env = {
+        "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+        "OPENSSL_NO_VENDOR": "1",
+        "OPENSSL_STATIC": "1",
+    },
+    build_script_tags = ["annotation-build-script-tag-test"],
+    crate = "openssl-sys",
+    data = ["@openssl//:gen_dir"],
+    gen_build_script = "on",
+    tags = ["annotation-tag-test"],
+)
+
+inject_repo(crate, "openssl")

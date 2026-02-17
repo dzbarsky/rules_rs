@@ -176,90 +176,20 @@ crate.annotation(
 ]
 
 ### Fix -sys crates
-bazel_dep(name = "bzip2", version = "1.0.8.bcr.3")
-
-crate.annotation(
-    crate = "bzip2-sys",
-    gen_build_script = "off",
-    deps = ["@bzip2//:bz2"],
-)
-
-inject_repo(crate, "bzip2")
-
-bazel_dep(name = "glib", version = "2.82.2.bcr.7")
-
-crate.annotation(
-    crate = "gio-sys",
-    gen_build_script = "off",
-    deps = ["@glib//gio"],
-)
-crate.annotation(
-    crate = "glib-sys",
-    gen_build_script = "off",
-    deps = ["@glib//glib"],
-)
-crate.annotation(
-    crate = "gobject-sys",
-    gen_build_script = "off",
-    deps = ["@glib//gobject"],
-)
-
-inject_repo(crate, "glib")
-
-bazel_dep(name = "xz", version = "5.4.5.bcr.8")
-
-crate.annotation(
-    crate = "lzma-sys",
-    gen_build_script = "off",
-    deps = ["@xz//:lzma"],
-)
-
-inject_repo(crate, "xz")
-
-bazel_dep(name = "zstd", version = "1.5.7.bcr.1")
-
-crate.annotation(
-    crate = "zstd-sys",
-    gen_build_script = "off",
-    deps = ["@zstd"],
-)
-
-inject_repo(crate, "zstd")
+include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+include("//:3rd_party/glib-sys/include.MODULE.bazel")
+include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): alsa-sys is not curently tested, fix it
-bazel_dep(name = "alsa_lib", version = "1.2.9.bcr.4")
+include("//:3rd_party/alsa-sys/include.MODULE.bazel")
+include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
-crate.annotation(
-    crate = "alsa-sys",
-    gen_build_script = "off",
-    deps = ["@alsa_lib"],
-)
-
-inject_repo(crate, "alsa_lib")
-
-bazel_dep(name = "openssl", version = "3.5.5.bcr.0")
 single_version_override(
     module_name = "openssl",
     patch_strip = 1,
     patches = ["//:openssl-perl-genrule.patch"],
 )
-
-crate.annotation(
-    build_script_data = [
-        "@openssl//:gen_dir",
-    ],
-    build_script_env = {
-        "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-        "OPENSSL_NO_VENDOR": "1",
-        "OPENSSL_STATIC": "1",
-    },
-    build_script_tags = ["annotation-build-script-tag-test"],
-    crate = "openssl-sys",
-    data = ["@openssl//:gen_dir"],
-    tags = ["annotation-tag-test"],
-)
-
-inject_repo(crate, "openssl")
 
 crate.annotation(
     crate = "ring",
@@ -292,15 +222,7 @@ crate.annotation(
 
 inject_repo(crate, "aws-lc")
 
-bazel_dep(name = "jemalloc", version = "5.3.0-bcr.alpha.4")
-
-crate.annotation(
-    crate = "tikv-jemalloc-sys",
-    gen_build_script = "off",
-    deps = ["@jemalloc"],
-)
-
-inject_repo(crate, "jemalloc")
+include("//:3rd_party/tikv-jemalloc-sys/include.MODULE.bazel")
 
 crate.annotation(
     build_script_env = {
@@ -321,35 +243,9 @@ crate.annotation(
     patches = ["//:gemm-common-fp16.patch"],
 )
 
-bazel_dep(name = "gdk-pixbuf", version = "2.44.4")
-
-crate.annotation(
-    crate = "gdk-pixbuf-sys",
-    gen_build_script = "off",
-    deps = ["@gdk-pixbuf"],
-)
-
-inject_repo(crate, "gdk-pixbuf")
-
-bazel_dep(name = "cairo", version = "1.18.4")
-
-crate.annotation(
-    crate = "cairo-sys-rs",
-    gen_build_script = "off",
-    deps = ["@cairo"],
-)
-
-inject_repo(crate, "cairo")
-
-bazel_dep(name = "at-spi2-core", version = "2.58.2")
-
-crate.annotation(
-    crate = "atk-sys",
-    gen_build_script = "off",
-    deps = ["@at-spi2-core//atk"],
-)
-
-inject_repo(crate, "at-spi2-core")
+include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
+include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
+include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
     crate = "khronos_api",
@@ -374,25 +270,8 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 
 inject_repo(crate, "mimalloc")
 
-bazel_dep(name = "zlib", version = "1.3.1.bcr.8")
-
-crate.annotation(
-    crate = "libz-sys",
-    gen_build_script = "off",
-    deps = ["@zlib"],
-)
-
-inject_repo(crate, "zlib")
-
-bazel_dep(name = "libgit2", version = "1.9.1")
-
-crate.annotation(
-    crate = "libgit2-sys",
-    gen_build_script = "off",
-    deps = ["@libgit2"],
-)
-
-inject_repo(crate, "libgit2")
+include("//:3rd_party/libz-sys/include.MODULE.bazel")
+include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
 
 crate.annotation(
     additive_build_file_content = """
@@ -421,26 +300,7 @@ cc_import(
     deps = [":windows_import_lib"],
 )
 
-llvm = use_extension("@toolchains_llvm_bootstrapped//extensions:llvm.bzl", "llvm")
-use_repo(llvm, "llvm-project")
-
-crate.annotation(
-    build_script_data = [
-        "@macosx15.4.sdk//sysroot",
-    ],
-    build_script_env = {
-        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
-        "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
-        "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
-    },
-    build_script_tools = [
-        "@rules_rs_test//:clang",
-        "@toolchains_llvm_bootstrapped//:builtin_headers",
-    ],
-    crate = "coreaudio-sys",
-)
-
-inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")
+include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz
 crate.annotation(

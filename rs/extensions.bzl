@@ -1,7 +1,7 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("//rs/private:annotations.bzl", "WELL_KNOWN_ANNOTATIONS", "annotation_for", "build_annotation_map", "format_well_known_annotation")
+load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
@@ -130,6 +130,7 @@ def _generate_hub_and_spokes(
         mctx,
         hub_name,
         annotations,
+        suggested_annotation_snippet_paths,
         cargo_path,
         cargo_lock_path,
         workspace_cargo_toml_json,
@@ -147,6 +148,7 @@ def _generate_hub_and_spokes(
         mctx (module_ctx): The module context object.
         hub_name (string): name
         annotations (dict): Annotation tags to apply.
+        suggested_annotation_snippet_paths (dict): Mapping crate -> snippet file path.
         cargo_path (path): Path to hermetic `cargo` binary.
         cargo_lock_path (path): Cargo.lock path
         workspace_cargo_toml_json (dict): Parsed workspace Cargo.toml
@@ -565,8 +567,13 @@ def _generate_hub_and_spokes(
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         annotation = annotation_for(annotations, crate_name, version)
-        well_known_annotation = WELL_KNOWN_ANNOTATIONS.get(crate_name)
-        if well_known_annotation and annotation.gen_build_script == "auto":
+        suggested_annotation = None
+        if annotation.gen_build_script == "auto":
+            snippet_path = suggested_annotation_snippet_paths.get(crate_name)
+            if snippet_path:
+                suggested_annotation = mctx.read(snippet_path).strip()
+
+        if suggested_annotation:
             print("""
 WARNING: A well-known crate annotation exists for {crate}! Apply the following to your MODULE.bazel:
 
@@ -583,7 +590,7 @@ crate.annotation(
 )
 ```""".format(
                 crate = crate_name,
-                formatted_well_known_annotation = format_well_known_annotation(crate_name, well_known_annotation),
+                formatted_well_known_annotation = suggested_annotation,
             ))
 
         kwargs = dict(
@@ -925,6 +932,7 @@ def _crate_impl(mctx):
     toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
 
     downloader_state = new_downloader_state()
+    suggested_annotation_snippet_paths = well_known_annotation_snippet_paths(mctx)
 
     packages_by_hub_name = {}
     cargo_toml_by_hub_name = {}
@@ -986,9 +994,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()

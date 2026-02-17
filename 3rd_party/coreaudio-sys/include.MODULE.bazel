@@ -1,0 +1,22 @@
+llvm = use_extension("@toolchains_llvm_bootstrapped//extensions:llvm.bzl", "llvm")
+use_repo(llvm, "llvm-project")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    build_script_data = [
+        "@macosx15.4.sdk//sysroot",
+    ],
+    build_script_env = {
+        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
+        "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
+        "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
+    },
+    build_script_tools = [
+        "@rules_rs_test//:clang",
+        "@toolchains_llvm_bootstrapped//:builtin_headers",
+    ],
+    crate = "coreaudio-sys",
+    gen_build_script = "on",
+)
+
+inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")

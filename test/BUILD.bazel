@@ -4,12 +4,13 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 cc_shared_library(
     name = "clang",
-    deps = ["@llvm-project//clang:libclang"],
     visibility = ["//visibility:public"],
+    deps = ["@llvm-project//clang:libclang"],
 )
 
 DISABLED = [
     "annotation_crate_features",
+    "3rd_party",
     #"binaries",
     #"build_script_aliases",
     #"build_script_env_select",
@@ -91,9 +92,9 @@ genrule(
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
-        "@binaries//:protoc-gen-prost__protoc-gen-prost",
         ":rust_binary",
         ":verify_annotation_tags",
+        "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ],
 )
 
@@ -111,8 +112,8 @@ ALL_PLATFORMS = [
 [
     platform_transition_filegroup(
         name = "all_builds_" + platform,
-        target_platform = "@toolchains_llvm_bootstrapped//platforms:" + platform,
         srcs = ["all_builds"],
+        target_platform = "@toolchains_llvm_bootstrapped//platforms:" + platform,
     )
     for platform in ALL_PLATFORMS
 ]
