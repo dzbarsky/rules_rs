@@ -85,5 +85,5 @@ WELL_KNOWN_ANNOTATIONS = {
     "libgit2-sys": _bazel_dep("@libgit2", "1.9.1"),
     "lzma-sys": _bazel_dep("@xz//:lzma", "5.4.5.bcr.7"),
     "tikv-jemalloc-sys": _bazel_dep("@jemalloc", "5.3.0-bcr.alpha.4"),
-    "zstd-sys": _bazel_dep("@zstd", "1.5.7"),
+    "zstd-sys": _bazel_dep("@zstd", "1.5.7.bcr.1"),
 }

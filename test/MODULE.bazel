@@ -218,7 +218,7 @@ crate.annotation(
 
 inject_repo(crate, "xz")
 
-bazel_dep(name = "zstd", version = "1.5.7")
+bazel_dep(name = "zstd", version = "1.5.7.bcr.1")
 
 crate.annotation(
     crate = "zstd-sys",
