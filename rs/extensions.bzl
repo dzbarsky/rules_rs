@@ -598,11 +598,13 @@ crate.annotation(
             build_script_env = annotation.build_script_env,
             build_script_toolchains = annotation.build_script_toolchains,
             build_script_tools = annotation.build_script_tools,
+            build_script_tags = annotation.build_script_tags,
             build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
             rustc_flags = annotation.rustc_flags,
             data = annotation.data,
             deps = annotation.deps,
+            crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
             aliases = feature_resolutions.aliases,
             gen_binaries = annotation.gen_binaries,
@@ -1106,6 +1108,9 @@ _annotation = tag_class(
         "build_script_toolchains": attr.label_list(
             doc = "A list of labels to set on a crates's `cargo_build_script::toolchains` attribute.",
         ),
+        "build_script_tags": attr.string_list(
+            doc = "A list of tags to add to a crate's `cargo_build_script` target.",
+        ),
         "build_script_tools": _relative_label_list(
             doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
         ),
@@ -1132,6 +1137,9 @@ _annotation = tag_class(
         # ),
         "deps": _relative_label_list(
             doc = "A list of labels to add to a crate's `rust_library::deps` attribute.",
+        ),
+        "tags": attr.string_list(
+            doc = "A list of tags to add to a crate's generated targets.",
         ),
         # "disable_pipelining": attr.bool(
         #     doc = "If True, disables pipelining for library targets for this crate.",

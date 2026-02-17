@@ -1,22 +1,29 @@
+module(name = "rules_rs_test")
+
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.4")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.6")
 
 osx = use_extension("@toolchains_llvm_bootstrapped//extensions:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
 osx.framework(name = "CoreServices")
 osx.framework(name = "CFNetwork")
 osx.framework(name = "DiskArbitration")
+osx.framework(name = "AudioUnit")
+osx.framework(name = "AudioToolbox")
+osx.framework(name = "CoreAudio")
+osx.framework(name = "CoreAudioTypes")
+osx.framework(name = "OpenAL")
+osx.framework(name = "CoreMIDI")
 osx.framework(name = "IOKit")
 osx.framework(name = "Security")
+use_repo(osx, "macosx15.4.sdk")
 
 #local_path_override(
 #    module_name = "toolchains_llvm_bootstrapped",
-#    path = "../../toolchains_llvm_bootstrapped",
+#    path = "/Users/dzbarsky/toolchains_llvm_bootstrapped",
 #)
 
-register_toolchains(
-    "@toolchains_llvm_bootstrapped//toolchain:all",
-)
+register_toolchains("@toolchains_llvm_bootstrapped//toolchain:all")
 
 bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "bazel_lib", version = "3.2.0")
@@ -82,6 +89,7 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
+    "bindgen",
     "build_script_aliases",
     "build_script_env_select",
     "build_script_runtime_env",
@@ -198,19 +206,17 @@ crate.annotation(
 
 inject_repo(crate, "glib")
 
-bazel_dep(name = "xz", version = "5.4.5.bcr.7")
+bazel_dep(name = "xz", version = "5.4.5.bcr.8")
 
 crate.annotation(
     crate = "lzma-sys",
-    # TODO(zbarsky): Doesn't work on windows arm?
-    #gen_build_script = "off",
-    #deps = ["@xz//:lzma"],
-    gen_build_script = "on",
+    gen_build_script = "off",
+    deps = ["@xz//:lzma"],
 )
 
 inject_repo(crate, "xz")
 
-bazel_dep(name = "zstd", version = "1.5.7")
+bazel_dep(name = "zstd", version = "1.5.7.bcr.1")
 
 crate.annotation(
     crate = "zstd-sys",
@@ -247,8 +253,10 @@ crate.annotation(
         "OPENSSL_NO_VENDOR": "1",
         "OPENSSL_STATIC": "1",
     },
+    build_script_tags = ["annotation-build-script-tag-test"],
     crate = "openssl-sys",
     data = ["@openssl//:gen_dir"],
+    tags = ["annotation-tag-test"],
 )
 
 inject_repo(crate, "openssl")
@@ -412,6 +420,27 @@ cc_import(
     gen_build_script = "off",
     deps = [":windows_import_lib"],
 )
+
+llvm = use_extension("@toolchains_llvm_bootstrapped//extensions:llvm.bzl", "llvm")
+use_repo(llvm, "llvm-project")
+
+crate.annotation(
+    build_script_data = [
+        "@macosx15.4.sdk//sysroot",
+    ],
+    build_script_env = {
+        "BINDGEN_EXTRA_CLANG_ARGS": "-isystem $(location @toolchains_llvm_bootstrapped//:builtin_headers)",
+        "COREAUDIO_SDK_PATH": "$(location @macosx15.4.sdk//sysroot)",
+        "LIBCLANG_PATH": "$(location @rules_rs_test//:clang)",
+    },
+    build_script_tools = [
+        "@rules_rs_test//:clang",
+        "@toolchains_llvm_bootstrapped//:builtin_headers",
+    ],
+    crate = "coreaudio-sys",
+)
+
+inject_repo(crate, "rules_rs_test", "toolchains_llvm_bootstrapped", "macosx15.4.sdk")
 
 # TODO(zbarsky): fix this for realz
 crate.annotation(

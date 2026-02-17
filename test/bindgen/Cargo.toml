@@ -1,0 +1,9 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+coreaudio-rs = "0.11.3"

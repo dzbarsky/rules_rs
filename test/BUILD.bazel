@@ -1,5 +1,12 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+cc_shared_library(
+    name = "clang",
+    deps = ["@llvm-project//clang:libclang"],
+    visibility = ["//visibility:public"],
+)
 
 DISABLED = [
     "annotation_crate_features",
@@ -55,11 +62,38 @@ rust_binary(
     ],
 )
 
+genquery(
+    name = "openssl_sys_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
+    scope = ["@optional_build_deps//:openssl-sys"],
+)
+
+genquery(
+    name = "openssl_sys_build_script_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
+    scope = ["@optional_build_deps//:openssl-sys"],
+)
+
+genrule(
+    name = "verify_annotation_tags",
+    srcs = [
+        ":openssl_sys_has_annotation_tag",
+        ":openssl_sys_build_script_has_annotation_tag",
+    ],
+    outs = ["verify_annotation_tags.txt"],
+    cmd = """
+        test -s $(location :openssl_sys_has_annotation_tag)
+        test -s $(location :openssl_sys_build_script_has_annotation_tag)
+        echo ok > $@
+    """,
+)
+
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
         ":rust_binary",
+        ":verify_annotation_tags",
     ],
 )
 

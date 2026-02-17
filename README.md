@@ -41,6 +41,12 @@ crate.annotation(
 
 See https://registry.bazel.build/docs/rules_rs
 
+## Users
+- [OpenAI Codex](https://github.com/openai/codex)
+- [Aspect CLI](https://github.com/aspect-build/aspect-cli)
+- [Datadog Agent](https://github.com/DataDog/datadog-agent)
+- [ZML](https://github.com/zml/zml/tree/zml/v2)
+
 ## Telemetry & privacy policy
 
 This ruleset collects limited usage data via [`tools_telemetry`](https://github.com/aspect-build/tools_telemetry), which is reported to Aspect Build Inc and governed by their [privacy policy](https://www.aspect.build/privacy-policy).
