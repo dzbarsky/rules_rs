@@ -64,27 +64,27 @@ rust_binary(
 )
 
 genquery(
-    name = "openssl_sys_has_annotation_tag",
-    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
-    scope = ["@optional_build_deps//:openssl-sys"],
+    name = "rav1e_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
+    scope = ["@build_script_runtime_env//:rav1e"],
 )
 
 genquery(
-    name = "openssl_sys_build_script_has_annotation_tag",
-    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@optional_build_deps//:openssl-sys))',
-    scope = ["@optional_build_deps//:openssl-sys"],
+    name = "rav1e_build_script_has_annotation_tag",
+    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
+    scope = ["@build_script_runtime_env//:rav1e"],
 )
 
 genrule(
     name = "verify_annotation_tags",
     srcs = [
-        ":openssl_sys_has_annotation_tag",
-        ":openssl_sys_build_script_has_annotation_tag",
+        ":rav1e_has_annotation_tag",
+        ":rav1e_build_script_has_annotation_tag",
     ],
     outs = ["verify_annotation_tags.txt"],
     cmd = """
-        test -s $(location :openssl_sys_has_annotation_tag)
-        test -s $(location :openssl_sys_build_script_has_annotation_tag)
+        test -s $(location :rav1e_has_annotation_tag)
+        test -s $(location :rav1e_build_script_has_annotation_tag)
         echo ok > $@
     """,
 )

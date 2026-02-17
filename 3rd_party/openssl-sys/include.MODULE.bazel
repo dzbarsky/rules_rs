@@ -10,11 +10,9 @@ crate.annotation(
         "OPENSSL_NO_VENDOR": "1",
         "OPENSSL_STATIC": "1",
     },
-    build_script_tags = ["annotation-build-script-tag-test"],
     crate = "openssl-sys",
     data = ["@openssl//:gen_dir"],
     gen_build_script = "on",
-    tags = ["annotation-tag-test"],
 )
 
 inject_repo(crate, "openssl")

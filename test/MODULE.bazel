@@ -228,10 +228,12 @@ crate.annotation(
     build_script_env = {
         "NASM": "$(execpath @nasm//:nasm)",
     },
+    build_script_tags = ["annotation-build-script-tag-test"],
     build_script_tools = ["@nasm//:nasm"],
     crate = "rav1e",
     patch_tool = "patch",
     patches = ["//:rav1e-nasm-0.8.1.patch"],
+    tags = ["annotation-tag-test"],
     version = "0.8.1",
 )
 
