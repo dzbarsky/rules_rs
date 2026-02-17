@@ -8,6 +8,7 @@ edition = "2024"
 [dependencies]
 # TODO(zbarsky): With multiple bitflags, this fails, we need to harmonize version for git crates as well
 #bitflags = { git = "https://github.com/bitflags/bitflags", rev = "de0ec28f9999bb8984fa92e19a2f53181098cc87" }
+salsa = { git = "https://github.com/salsa-rs/salsa.git", rev = "53421c2fff87426fa0bb51cab06632b87646de13" }
 serde_derive = { git = "ssh://git@github.com/serde-rs/serde.git", rev = "4e278703c62428b0a72e4ecec434a99c0e8576a3" }
 pm-bin = { git = "https://bitbucket.org/fm-elpac/pm-bin.git", rev = "0c313d913c3beabe4b722f85bdd932fbf9fdd896" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers", rev = "007fc767ac78fe4ec43c6790afbee5063157fc62" }
