@@ -78,6 +78,13 @@ def _relative_to_workspace(path, workspace_root):
     rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
     return "/".join(rel_parts) if rel_parts else "."
 
+def _label_directory(label):
+    idx = label.name.rfind("/")
+    if idx == -1:
+        return label.package
+
+    return paths.join(label.package, label.name[:idx])
+
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
         dep = {"name": dep}
@@ -789,6 +796,7 @@ RESOLVED_PLATFORMS = select({{
     _date(mctx, "done")
 
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
+    workspace_package = _label_directory(cargo_lock_path)
 
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
@@ -816,10 +824,7 @@ RESOLVED_PLATFORMS = select({{
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
-                bazel_target = "//" + paths.join(cargo_lock_path.package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
-
-                # TODO(zbarsky): check if we actually need this?
-                aliases[bazel_target] = dep["name"]
+                bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
 
             target = dep.get("target")
             match = cfg_match_cache.get(target)
@@ -842,7 +847,7 @@ RESOLVED_PLATFORMS = select({{
             for triple in match:
                 target_deps[triple].add(bazel_target)
 
-        bazel_package = paths.join(cargo_lock_path.package, package_dir)
+        bazel_package = paths.join(workspace_package, package_dir)
 
         deps, conditional_deps = render_select([], deps)
         build_deps, conditional_build_deps = render_select([], build_deps)

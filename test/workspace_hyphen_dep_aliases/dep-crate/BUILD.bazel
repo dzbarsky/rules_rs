@@ -1,0 +1,14 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@workspace_hyphen_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "dep-crate",
+    srcs = ["src/lib.rs"],
+    crate_name = "dep_crate",
+    edition = "2024",
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)

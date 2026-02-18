@@ -1,0 +1,3 @@
+[workspace]
+members = ["consumer", "dep-crate"]
+resolver = "2"
