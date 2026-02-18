@@ -1,11 +1,21 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_cc//cc:defs.bzl", "cc_shared_library")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 cc_shared_library(
     name = "clang",
     visibility = ["//visibility:public"],
     deps = ["@llvm-project//clang:libclang"],
+)
+
+sh_test(
+    name = "dummy_test",
+    srcs = ["dummy_test.sh"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 DISABLED = [
