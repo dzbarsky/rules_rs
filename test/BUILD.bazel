@@ -77,12 +77,20 @@ genquery(
     name = "rav1e_has_annotation_tag",
     expression = 'attr("tags", ".*annotation-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
     scope = ["@build_script_runtime_env//:rav1e"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genquery(
     name = "rav1e_build_script_has_annotation_tag",
     expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
     scope = ["@build_script_runtime_env//:rav1e"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genrule(
@@ -97,15 +105,21 @@ genrule(
         test -s $(location :rav1e_build_script_has_annotation_tag)
         echo ok > $@
     """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":rust_binary",
-        ":verify_annotation_tags",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
-    ],
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [":verify_annotation_tags"],
+    }),
 )
 
 ALL_PLATFORMS = [

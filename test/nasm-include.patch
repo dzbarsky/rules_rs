@@ -7,4 +7,21 @@
 +        "-Iinclude",
      ],
  })
+
+diff --git a/asm/warnings_c.h b/asm/warnings_c.h
+--- a/asm/warnings_c.h
++++ b/asm/warnings_c.h
+@@ -1,4 +1,4 @@
+-#include "error.h"
++#include "../include/error.h"
+
+ const char * const warning_name[62] = {
+ 	NULL,
+
+diff --git a/error.h b/error.h
+new file mode 100644
+--- /dev/null
++++ b/error.h
+@@ -0,0 +1 @@
++#include "include/error.h"
  

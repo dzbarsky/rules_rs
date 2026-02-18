@@ -9,3 +9,4 @@ common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
 common --repo_contents_cache=~/bazel_repo_contents_cache
 common --disk_cache=~/bazel_cache
 
+common:remote --jobs=800

@@ -6,6 +6,7 @@ common --incompatible_disallow_empty_glob=False
 
 common --@rules_cc//cc/toolchains/args/archiver_flags:use_libtool_on_macos=False
 common --@toolchains_llvm_bootstrapped//config:experimental_stub_libgcc_s
+common --@rules_rust//rust/settings:experimental_use_sh_toolchain_for_bootstrap_process_wrapper
 
 # For some BCR -sys deps
 common --@rules_python//python/config_settings:bootstrap_impl=script
@@ -17,6 +18,6 @@ common --remote_download_minimal
 common --nobuild_runfile_links
 common --noexperimental_throttle_remote_action_building
 
-common:remote --jobs=1200
+common:remote --jobs=800
 common:remote --extra_execution_platforms=//:rbe
 common:remote --remote_executor=grpcs://remote.buildbuddy.io
