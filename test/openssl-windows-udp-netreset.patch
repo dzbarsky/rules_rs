@@ -1,0 +1,13 @@
+--- a/ssl/quic/quic_reactor.c
++++ b/ssl/quic/quic_reactor.c
+@@ -15,6 +15,10 @@
+ #include <winsock2.h>
+ #include <mstcpip.h>
+ #include <mswsock.h>
++#ifndef SIO_UDP_NETRESET
++/* MinGW headers may not define this newer constant yet. */
++#define SIO_UDP_NETRESET SIO_UDP_CONNRESET
++#endif
+ #endif
+ 
+ /*

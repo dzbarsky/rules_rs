@@ -1,4 +1,4 @@
-bazel_dep(name = "xz", version = "5.4.5.bcr.7")
+bazel_dep(name = "xz", version = "5.4.5.bcr.8")
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(

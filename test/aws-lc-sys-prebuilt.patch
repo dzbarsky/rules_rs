@@ -96,15 +96,7 @@
 +    }
 +
 +    fn build_rust_wrapper(&self) {
-+        let cc_builder = CcBuilder::new(
-+            self.manifest_dir.clone(),
-+            self.out_dir.clone(),
-+            self.build_prefix.clone(),
-+            OutputLibType::Static,
-+        );
-+        let mut cc_build = cc_builder.prepare_builder();
-+        cc_build.file(self.manifest_dir.join("rust_wrapper.c"));
-+        cc_build.compile(OutputLib::RustWrapper.libname(&self.build_prefix).as_str());
++        // aws-lc-sys 0.37.0 does not include rust_wrapper.c.
 +    }
 +}
 +
@@ -200,10 +192,7 @@
 +    }
 +
 +    fn build(&self) -> Result<(), String> {
-+        self.build_rust_wrapper();
-+
 +        let mut search_paths = HashSet::new();
-+        search_paths.insert(self.out_dir.clone());
 +        for lib in self.libraries.iter() {
 +            if let Some(dir) = lib.link_dir() {
 +                if search_paths.insert(dir.clone()) {
@@ -216,14 +205,6 @@
 +                lib.link_name
 +            );
 +        }
-+        println!(
-+            "cargo:rustc-link-lib=static={}",
-+            OutputLib::RustWrapper.libname(&self.build_prefix)
-+        );
-+        println!(
-+            "cargo:rustc-link-search=native={}",
-+            self.out_dir.display()
-+        );
 +
 +        Ok(())
 +    }
