@@ -275,7 +275,7 @@ def _generate_hub_and_spokes(
 
                     # Crates published with newer Cargo populate this field for `resolver = "2"`.
                     # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
-                    features.update(metadata.get("features2", {}))
+                    features.update(metadata.get("features2") or {})
 
                     dependencies = metadata["deps"]
 
