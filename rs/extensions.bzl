@@ -157,7 +157,7 @@ def _generate_hub_and_spokes(
         platform_triples (list[string]): Triples to resolve for
         cargo_credentials (dict): Mapping of registry to auth token.
         cargo_config (label): .cargo/config.toml file
-        validate_lockfile (bool): If true, validte we have appropriate versions in Cargo.lock
+        validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
@@ -1050,7 +1050,7 @@ _from_cargo = tag_class(
         ),
         "validate_lockfile": attr.bool(
             doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",
-            default = False,
+            default = True,
         ),
         "debug": attr.bool(),
     },
