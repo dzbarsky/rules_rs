@@ -20,4 +20,5 @@ common --noexperimental_throttle_remote_action_building
 
 common:remote --jobs=800
 common:remote --extra_execution_platforms=//:rbe
+common:remote --platforms=//:rbe
 common:remote --remote_executor=grpcs://remote.buildbuddy.io
