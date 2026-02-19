@@ -1,0 +1,10 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@workspace_hyphen_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
+
+rust_test(
+    name = "consumer_test",
+    aliases = aliases(),
+    srcs = ["src/lib.rs"],
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)

@@ -107,6 +107,7 @@ TESTS = [
     "platform_dep_features",
     "vendored_crate_override",
     "workspace_path_dependency",
+    "workspace_hyphen_dep_aliases",
     "binaries",
     "uv",
 ]
