@@ -5,7 +5,9 @@ load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
 load("//rs/private:rust_deps.bzl", "rust_deps")
 
-def _platform(triple):
+def _platform(triple, use_experimental_platforms):
+    if use_experimental_platforms:
+        return "@rules_rs//rs/experimental/platforms/config:" + triple
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
 
 def rust_crate(
@@ -32,7 +34,8 @@ def rust_crate(
         build_script_tools,
         build_script_tags,
         is_proc_macro,
-        binaries):
+        binaries,
+        use_experimental_platforms):
 
     package_metadata(
         name = name + "_package_metadata",
@@ -77,7 +80,7 @@ def rust_crate(
         # do this is to stamp out a build script per target with the right feature set, and then select among them.
         for triple in triples:
             build_script_name = name + "_" + triple + "_build_script"
-            branches[_platform(triple)] = build_script_name
+            branches[_platform(triple, use_experimental_platforms)] = build_script_name
 
             _build_script(
                 name = build_script_name,
@@ -138,7 +141,7 @@ def rust_crate(
         data = data,
         proc_macro_deps = [name + "_proc_macro_deps"],
         crate_features = crate_features + select(
-            {_platform(k): v for k, v in conditional_crate_features.items()} |
+            {_platform(k, use_experimental_platforms): v for k, v in conditional_crate_features.items()} |
             {"//conditions:default": []},
         ),
         crate_root = crate_root,

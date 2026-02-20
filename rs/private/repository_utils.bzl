@@ -156,6 +156,7 @@ rust_crate(
     build_script_tags = {build_script_tags},
     is_proc_macro = {is_proc_macro},
     binaries = {binaries},
+    use_experimental_platforms = {use_experimental_platforms},
 )
 """
 
@@ -210,6 +211,7 @@ rust_crate(
         build_script_tags = repr(attr.build_script_tags),
         is_proc_macro = repr(is_proc_macro),
         binaries = binaries,
+        use_experimental_platforms = use_experimental_platforms,
     )
 
 common_attrs = {
