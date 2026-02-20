@@ -806,9 +806,11 @@ RESOLVED_PLATFORMS = select({{
         dev_deps = {triple: set() for triple in platform_triples}
         package_dir = _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml")
         binaries = {}
+        shared_libraries = {}
 
         for target in package.get("targets", []):
-            if "bin" not in target.get("kind", []):
+            kinds = target.get("kind", [])
+            if "cdylib" not in kinds or "bin" not in kinds:
                 continue
 
             src_path = target.get("src_path")
@@ -819,7 +821,10 @@ RESOLVED_PLATFORMS = select({{
             if package_dir and entrypoint.startswith(package_dir + "/"):
                 entrypoint = entrypoint.removeprefix(package_dir + "/")
 
-            binaries[target["name"]] = entrypoint
+            if "cdylib" in kinds:
+                shared_libraries[target["name"]] = entrypoint
+            elif "bin" in kinds:
+                binaries[target["name"]] = entrypoint
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
@@ -870,6 +875,9 @@ RESOLVED_PLATFORMS = select({{
         "binaries": {{
             {binaries}
         }},
+        "shared_libraries": {{
+            {shared_libraries}
+        }},
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
@@ -880,6 +888,7 @@ RESOLVED_PLATFORMS = select({{
             dev_deps = ",\n            ".join(['"%s"' % d for d in sorted(dev_deps)]),
             conditional_dev_deps = " + " + conditional_dev_deps if conditional_dev_deps else "",
             binaries = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(binaries.items())]),
+            shared_libraries = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(shared_libraries.items())]),
         ))
 
     data_bzl_contents = "DEP_DATA = {" + "\n".join(workspace_dep_stanzas) + "\n}"
