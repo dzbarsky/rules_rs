@@ -1,5 +1,8 @@
 load(":rust_deps.bzl", _rust_deps = "rust_deps")
 
+def _filter_by_prefix(deps, prefix):
+    return [dep for dep in deps if dep.startswith(prefix)]
+
 def rust_deps(name, **kwargs):
     if native.existing_rule(name):
         fail("""
@@ -44,8 +47,9 @@ def all_crate_deps(
     dev_deps = dep_data["dev_deps"]
 
     if filter_prefix:
-        deps = [dep for dep in deps if dep.startswith(filter_prefix)]
-        build_deps = [dep for dep in build_deps if dep.startswith(filter_prefix)]
+        deps = _filter_by_prefix(deps, filter_prefix)
+        build_deps = _filter_by_prefix(build_deps, filter_prefix)
+        dev_deps = _filter_by_prefix(dev_deps, filter_prefix)
 
     if normal_dev:
         rust_deps(
