@@ -943,7 +943,7 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 [[package]]
 name = "salsa"
 version = "0.26.0"
-source = "git+https://github.com/salsa-rs/salsa.git#53421c2fff87426fa0bb51cab06632b87646de13"
+source = "git+https://github.com/salsa-rs/salsa.git?rev=53421c2fff87426fa0bb51cab06632b87646de13#53421c2fff87426fa0bb51cab06632b87646de13"
 dependencies = [
  "boxcar",
  "crossbeam-queue",
@@ -967,12 +967,12 @@ dependencies = [
 [[package]]
 name = "salsa-macro-rules"
 version = "0.26.0"
-source = "git+https://github.com/salsa-rs/salsa.git#53421c2fff87426fa0bb51cab06632b87646de13"
+source = "git+https://github.com/salsa-rs/salsa.git?rev=53421c2fff87426fa0bb51cab06632b87646de13#53421c2fff87426fa0bb51cab06632b87646de13"
 
 [[package]]
 name = "salsa-macros"
 version = "0.26.0"
-source = "git+https://github.com/salsa-rs/salsa.git#53421c2fff87426fa0bb51cab06632b87646de13"
+source = "git+https://github.com/salsa-rs/salsa.git?rev=53421c2fff87426fa0bb51cab06632b87646de13#53421c2fff87426fa0bb51cab06632b87646de13"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1134,6 +1134,7 @@ dependencies = [
  "pm-bin",
  "salsa",
  "serde_derive 1.0.228",
+ "tikv-jemalloc-sys",
  "tokenizers",
  "wirefilter-engine",
 ]
@@ -1182,6 +1183,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+source = "git+https://github.com/tikv/jemallocator?rev=baae33dd29ccd82c8330021418b293fa6eab5bbc#baae33dd29ccd82c8330021418b293fa6eab5bbc"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]

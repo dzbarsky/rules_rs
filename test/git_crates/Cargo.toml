@@ -15,3 +15,4 @@ tokenizers = { git = "https://github.com/huggingface/tokenizers", rev = "007fc76
 # TODO(zbarsky): Can remov this one bitflags handling above is fixed
 o2o = { git = "https://github.com/Artem-Romanenia/o2o", rev = "3fa37f788547fdeb50750e307f861d2d86f37ec8"}
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter", package = "wirefilter-engine" }
+tikv-jemalloc-sys = { git = "https://github.com/tikv/jemallocator", rev = "baae33dd29ccd82c8330021418b293fa6eab5bbc" }

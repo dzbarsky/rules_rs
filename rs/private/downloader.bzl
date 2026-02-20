@@ -217,6 +217,52 @@ def _find_path_dependency(dependencies, name):
 
     return None
 
+def _workspace_member_by_package_name_from_github(mctx, workspace_cargo_toml_url, cargo_toml_json):
+    in_flight_fetches = []
+    for member in (cargo_toml_json.get("workspace") or {}).get("members", []):
+        if "*" in member or "{" in member or "}" in member:
+            continue
+
+        member_cargo_toml_url = workspace_cargo_toml_url.replace("Cargo.toml", member + "/Cargo.toml")
+        member_cargo_toml_path = _sanitize_path_fragment(member_cargo_toml_url)
+        in_flight_fetches.append(struct(
+            member = member,
+            path = member_cargo_toml_path,
+            token = mctx.download(
+                member_cargo_toml_url,
+                member_cargo_toml_path,
+                allow_fail = True,
+                block = False,
+            ),
+        ))
+
+    member_by_package_name = {}
+    for fetch in in_flight_fetches:
+        fetch.token.wait()
+        member_cargo_toml_json = run_toml2json(mctx, fetch.path)
+        package_name = member_cargo_toml_json.get("package", {}).get("name")
+        if package_name:
+            member_by_package_name[package_name] = fetch.member
+
+    return member_by_package_name
+
+def _workspace_member_by_package_name_from_local_clone(mctx, workspace_cargo_toml_path, cargo_toml_json):
+    member_by_package_name = {}
+    workspace_cargo_toml_path_str = str(workspace_cargo_toml_path)
+
+    for member in (cargo_toml_json.get("workspace") or {}).get("members", []):
+        if "*" in member or "{" in member or "}" in member:
+            continue
+
+        member_cargo_toml_json = run_toml2json(
+            mctx,
+            workspace_cargo_toml_path_str.replace("Cargo.toml", member + "/Cargo.toml"))
+        package_name = member_cargo_toml_json.get("package", {}).get("name")
+        if package_name:
+            member_by_package_name[package_name] = member
+
+    return member_by_package_name
+
 def _compute_strip_prefix(annotation, cargo_toml_json, name):
     strip_prefix = annotation.strip_prefix
 
@@ -254,6 +300,7 @@ def download_metadata_for_git_crates(
         _ensure_cargo_toml_exists(mctx.path(cargo_toml_path), fetch_state)
 
         cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
+        workspace_member_by_package_name = None
 
         for package in fetch_state.packages:
             name = package["name"]
@@ -263,7 +310,16 @@ def download_metadata_for_git_crates(
                 strip_prefix = _compute_strip_prefix(annotation, cargo_toml_json, name)
 
                 if not strip_prefix:
-                    fail("Could not compute strip_prefix and could not find crate")
+                    if workspace_member_by_package_name == None:
+                        workspace_member_by_package_name = _workspace_member_by_package_name_from_github(
+                            mctx,
+                            url,
+                            cargo_toml_json,
+                        )
+                    strip_prefix = workspace_member_by_package_name.get(name)
+
+                if not strip_prefix:
+                    fail("Could not compute strip_prefix for crate '%s'" % name)
 
                 package["strip_prefix"] = strip_prefix
                 child_url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
@@ -288,6 +344,7 @@ def download_metadata_for_git_crates(
         cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
         _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
         cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
+        workspace_member_by_package_name = None
 
         for package in clone_state.packages:
             name = package["name"]
@@ -297,7 +354,16 @@ def download_metadata_for_git_crates(
                 strip_prefix = _compute_strip_prefix(annotation, cargo_toml_json, name)
 
                 if not strip_prefix:
-                    fail("Could not compute strip_prefix and could not find crate")
+                    if workspace_member_by_package_name == None:
+                        workspace_member_by_package_name = _workspace_member_by_package_name_from_local_clone(
+                            mctx,
+                            cargo_toml_path,
+                            cargo_toml_json,
+                        )
+                    strip_prefix = workspace_member_by_package_name.get(name)
+
+                if not strip_prefix:
+                    fail("Could not compute strip_prefix for crate '%s'" % name)
 
                 package["strip_prefix"] = strip_prefix
                 package["workspace_cargo_toml_json"] = cargo_toml_json
