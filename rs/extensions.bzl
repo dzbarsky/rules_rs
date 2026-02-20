@@ -810,7 +810,7 @@ RESOLVED_PLATFORMS = select({{
 
         for target in package.get("targets", []):
             kinds = target.get("kind", [])
-            if "cdylib" not in kinds or "bin" not in kinds:
+            if "cdylib" not in kinds and "bin" not in kinds:
                 continue
 
             src_path = target.get("src_path")
