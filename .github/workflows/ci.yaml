@@ -131,5 +131,5 @@ jobs:
             --repo_contents_cache= \
             --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY \
             --jobs=100 \
-            //:all_builds_windows_amd64 \
-            //:all_builds_windows_arm64
+            //:all_builds_aarch64-pc-windows-gnullvm \
+            //:all_builds_x86_64-pc-windows-gnullvm

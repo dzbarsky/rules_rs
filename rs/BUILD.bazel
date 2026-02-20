@@ -17,6 +17,7 @@ bzl_library(
         "//rs/private:toml2json",
         "@aspect_tools_telemetry_report//:defs.bzl",
         "@bazel_skylib//lib:paths",
+        "@rs_rust_host_tools//:defs.bzl",
     ],
 )
 
@@ -25,4 +26,53 @@ filegroup(
     name = "rust_crate",
     srcs = ["rust_crate.bzl"],
     visibility = ["//visibility:public"],
+)
+
+bzl_library(
+    name = "cargo_build_script",
+    srcs = ["cargo_build_script.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//cargo/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_binary",
+    srcs = ["rust_binary.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_library",
+    srcs = ["rust_library.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_proc_macro",
+    srcs = ["rust_proc_macro.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_test",
+    srcs = ["rust_test.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_shared_library",
+    srcs = ["rust_shared_library.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
+)
+
+bzl_library(
+    name = "rust_static_library",
+    srcs = ["rust_static_library.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_rust//rust:bzl_lib"],
 )

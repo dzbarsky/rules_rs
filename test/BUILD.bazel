@@ -1,13 +1,6 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
-load("@rules_cc//cc:defs.bzl", "cc_shared_library")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-
-cc_shared_library(
-    name = "clang",
-    visibility = ["//visibility:public"],
-    deps = ["@llvm-project//clang:libclang"],
-)
 
 sh_test(
     name = "dummy_test",
@@ -123,21 +116,19 @@ filegroup(
 )
 
 ALL_PLATFORMS = [
-    "linux_arm64",
-    "linux_amd64",
-    #"linux_arm64_musl",
-    #"linux_amd64_musl",
-    "macos_amd64",
-    "macos_arm64",
-    "windows_amd64",
-    "windows_arm64",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "aarch64-pc-windows-gnullvm",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-gnullvm",
 ]
 
 [
     platform_transition_filegroup(
         name = "all_builds_" + platform,
         srcs = ["all_builds"],
-        target_platform = "@toolchains_llvm_bootstrapped//platforms:" + platform,
+        target_platform = "@rules_rs//rs/experimental/platforms:" + platform,
     )
     for platform in ALL_PLATFORMS
 ]
@@ -147,6 +138,9 @@ platform(
     constraint_values = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
+        # Note: We need this so that Rust cfg=exec builds (build script, tools, proc_macros)
+        # can properly target the remote.
+        "@toolchains_llvm_bootstrapped//constraints/libc:gnu.2.28",
     ],
     exec_properties = {
         "container-image": "docker://ubuntu:22.04",

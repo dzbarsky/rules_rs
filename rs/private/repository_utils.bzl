@@ -1,7 +1,9 @@
 
 load(":semver.bzl", "parse_full_version")
 
-def _platform(triple):
+def _platform(triple, use_experimental_platforms):
+    if use_experimental_platforms:
+        return "@rules_rs//rs/experimental/platforms/config:" + triple
     return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
 
 def _format_branches(branches):
@@ -35,20 +37,20 @@ def _compute_select(non_platform_items, platform_items):
 
     return common_items, branches
 
-def render_select(non_platform_items, platform_items):
+def render_select(non_platform_items, platform_items, use_experimental_platforms):
     common_items, branches = _compute_select(non_platform_items, platform_items)
 
     if not branches:
         return common_items, ""
 
-    branches = [(_platform(k), repr(v)) for k, v in branches.items()]
+    branches = [(_platform(k, use_experimental_platforms), repr(v)) for k, v in branches.items()]
     branches.append(("//conditions:default", "[],"))
 
     return common_items, _format_branches(branches)
 
-def render_select_build_script_env(platform_items):
+def render_select_build_script_env(platform_items, use_experimental_platforms):
     branches = [
-        (_platform(triple), items)
+        (_platform(triple, use_experimental_platforms), items)
         for triple, items in platform_items.items()
     ]
 
@@ -118,7 +120,7 @@ def generate_build_file(rctx, cargo_toml):
 
     build_content = \
 """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(
@@ -168,12 +170,13 @@ rust_crate(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
-    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select)
-    build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select)
-    build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select)
-    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select)
+    use_experimental_platforms = rctx.attr.use_experimental_platforms
+    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_experimental_platforms)
+    build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_experimental_platforms)
+    build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_experimental_platforms)
+    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_experimental_platforms)
 
-    conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select)
+    conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_experimental_platforms)
 
     binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
 
@@ -277,4 +280,6 @@ common_attrs = {
               "applied. If this attribute is not set, patch_cmds will be executed on Windows, " +
               "which requires Bash binary to exist.",
     ),
+} | {
+    "use_experimental_platforms": attr.bool(),
 }

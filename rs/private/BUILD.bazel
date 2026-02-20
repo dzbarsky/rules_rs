@@ -93,6 +93,79 @@ bzl_library(
 )
 
 bzl_library(
+    name = "cargo_repository",
+    srcs = ["cargo_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "clippy_repository",
+    srcs = ["clippy_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "rustfmt_repository",
+    srcs = ["rustfmt_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "rustc_repository",
+    srcs = ["rustc_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "stdlib_repository",
+    srcs = ["stdlib_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "toolchains_repository",
+    srcs = ["toolchains_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/experimental/toolchains:declare_rustc_toolchains",
+        "//rs/experimental/toolchains:declare_rustfmt_toolchains",
+    ],
+)
+
+bzl_library(
+    name = "rust_repository_utils",
+    srcs = ["rust_repository_utils.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "annotations",
     srcs = ["annotations.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -101,6 +174,12 @@ bzl_library(
 bzl_library(
     name = "cfg_parser",
     srcs = ["cfg_parser.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "host_tools_repository",
+    srcs = ["host_tools_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 

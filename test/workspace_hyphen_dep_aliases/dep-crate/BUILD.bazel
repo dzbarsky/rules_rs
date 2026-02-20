@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
 
 package(default_visibility = ["//visibility:public"])

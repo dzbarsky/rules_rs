@@ -1,0 +1,20 @@
+package(default_visibility = ["//visibility:public"])
+
+constraint_setting(
+    name = "windows_abi",
+)
+
+constraint_value(
+    name = "windows_gnu",
+    constraint_setting = ":windows_abi",
+)
+
+constraint_value(
+    name = "windows_gnullvm",
+    constraint_setting = ":windows_abi",
+)
+
+constraint_value(
+    name = "windows_msvc",
+    constraint_setting = ":windows_abi",
+)

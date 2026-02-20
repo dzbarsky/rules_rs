@@ -1,7 +1,6 @@
-module(name = "rules_rs_test")
-
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.6")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.9")
+bazel_dep(name = "apple_support", version = "1.24.2", repo_name = "build_bazel_apple_support")
 
 osx = use_extension("@toolchains_llvm_bootstrapped//extensions:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
@@ -15,6 +14,7 @@ osx.framework(name = "CoreAudioTypes")
 osx.framework(name = "OpenAL")
 osx.framework(name = "CoreMIDI")
 osx.framework(name = "IOKit")
+osx.framework(name = "SystemConfiguration")
 osx.framework(name = "Security")
 use_repo(osx, "macosx15.4.sdk")
 
@@ -29,7 +29,6 @@ bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "bazel_lib", version = "3.2.0")
 bazel_dep(name = "rules_cc", version = "0.2.16")
-bazel_dep(name = "rules_rust", version = "0.68.1")
 bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
 single_version_override(
     module_name = "nasm",
@@ -46,44 +45,20 @@ single_version_override(
     patches = ["//:libffi-aarch64-trampoline.patch"],
 )
 
-single_version_override(
-    module_name = "rules_rust",
-    patch_strip = 1,
-    patches = [
-        "//:rules_rust.patch",
-        "//:rules_rust_windows_gnu.patch",
-    ],
-)
-
-#local_path_override(
-#    module_name = "rules_rust",
-#    path = "../../rules_rust",
-#)
-
-RUST_TRIPLES = [
-    "aarch64-unknown-linux-musl",
-    "aarch64-apple-darwin",
-    "aarch64-pc-windows-gnullvm",
-    "x86_64-unknown-linux-musl",
-    "x86_64-apple-darwin",
-    "x86_64-pc-windows-gnullvm",
-]
-
-rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
-rust.toolchain(
-    edition = "2024",
-    extra_target_triples = RUST_TRIPLES,
-    versions = ["1.89.0"],
-)
-use_repo(rust, "rust_toolchains")
-
-register_toolchains("@rust_toolchains//:all")
-
 bazel_dep(name = "rules_rs", version = "0.0.0")
 local_path_override(
     module_name = "rules_rs",
     path = "..",
 )
+
+toolchains = use_extension("@rules_rs//rs/experimental/toolchains:module_extension.bzl", "toolchains")
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.92.0",
+)
+use_repo(toolchains, "default_rust_toolchains")
+
+register_toolchains("@default_rust_toolchains//:all")
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 
@@ -120,7 +95,15 @@ TESTS = [
         # cargo_config = "//:.cargo/config.toml",
         # use_home_cargo_credentials = True,
         #debug = True,
-        platform_triples = RUST_TRIPLES,
+        use_experimental_platforms = True,
+        platform_triples = [
+            "aarch64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
+            "aarch64-pc-windows-gnullvm",
+            "x86_64-unknown-linux-gnu",
+            "x86_64-apple-darwin",
+            "x86_64-pc-windows-gnullvm",
+        ],
     )
     for test in TESTS
 ]
