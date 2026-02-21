@@ -413,6 +413,7 @@ def _generate_hub_and_spokes(
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
 
     for package in packages:
+        name = package["name"]
         deps_by_name = {}
         for maybe_fq_dep in package.get("dependencies", []):
             idx = maybe_fq_dep.find(" ")
@@ -441,7 +442,8 @@ def _generate_hub_and_spokes(
                 else:
                     resolved_version = select_matching_version(dep["req"], versions)
                     if not resolved_version:
-                        print(name, dep_package, versions, dep["req"])
+                        if not dep.get("optional"):
+                            print("WARNING: %s: could not resolve %s %s among %s" % (name, dep_package, dep["req"], versions))
                         continue
 
             dep_fq = _fq_crate(dep_package, resolved_version)
