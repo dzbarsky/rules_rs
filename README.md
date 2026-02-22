@@ -20,6 +20,37 @@ It is designed to:
 bazel_dep(name = "rules_rs", version = "0.0.33")
 ```
 
+## Rules
+
+Recommended: use `rules_rs` rule wrappers.
+
+You can still use `rules_rust` rule definitions while doing a gradual migration, but using
+`rules_rs` all the way saves you from having to refer to both.
+
+Example `BUILD.bazel` using `rules_rs` wrappers:
+
+```bzl
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)
+
+rust_binary(
+    name = "app",
+    srcs = ["src/main.rs"],
+    deps = [":lib"],
+)
+```
+
+For migration details, see [Migration](#migration).
+
 ## Toolchains
 
 Strongly recommended: use `rules_rs` toolchains.
