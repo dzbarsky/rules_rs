@@ -262,33 +262,8 @@ inject_repo(crate, "mimalloc")
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
-
-crate.annotation(
-    additive_build_file_content = """
-load("@rules_cc//cc:defs.bzl", "cc_import")
-
-cc_import(
-    name = "windows_import_lib",
-    static_library = glob(["lib/*.a"])[0],
-)
-""",
-    crate = "windows_x86_64_gnullvm",
-    gen_build_script = "off",
-    deps = [":windows_import_lib"],
-)
-crate.annotation(
-    additive_build_file_content = """
-load("@rules_cc//cc:defs.bzl", "cc_import")
-
-cc_import(
-    name = "windows_import_lib",
-    static_library = glob(["lib/*.a"])[0],
-)
-""",
-    crate = "windows_aarch64_gnullvm",
-    gen_build_script = "off",
-    deps = [":windows_import_lib"],
-)
+include("//:3rd_party/windows_x86_64_gnullvm/include.MODULE.bazel")
+include("//:3rd_party/windows_aarch64_gnullvm/include.MODULE.bazel")
 
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
