@@ -124,7 +124,7 @@ platform_triples = [
 ]
 ```
 
-# TODO(zbarsky): Should we issue warnings if you configure the triples in an unexpected way?
+TODO(zbarsky): Should we issue warnings if you configure the triples in an unexpected way?
 
 ## Import `rules_rust` from `rules_rs`
 
