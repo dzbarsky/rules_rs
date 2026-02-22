@@ -1,8 +1,8 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.9")
+bazel_dep(name = "llvm", version = "0.6.0")
 bazel_dep(name = "apple_support", version = "1.24.2", repo_name = "build_bazel_apple_support")
 
-osx = use_extension("@toolchains_llvm_bootstrapped//extensions:osx.bzl", "osx")
+osx = use_extension("@llvm//extensions:osx.bzl", "osx")
 osx.framework(name = "CoreFoundation")
 osx.framework(name = "CoreServices")
 osx.framework(name = "CFNetwork")
@@ -16,14 +16,14 @@ osx.framework(name = "CoreMIDI")
 osx.framework(name = "IOKit")
 osx.framework(name = "SystemConfiguration")
 osx.framework(name = "Security")
-use_repo(osx, "macosx15.4.sdk")
+use_repo(osx, "macos_sdk")
 
 #local_path_override(
-#    module_name = "toolchains_llvm_bootstrapped",
-#    path = "/Users/dzbarsky/toolchains_llvm_bootstrapped",
+#    module_name = "llvm",
+#    path = "../toolchains_llvm_bootstrapped",
 #)
 
-register_toolchains("@toolchains_llvm_bootstrapped//toolchain:all")
+register_toolchains("@llvm//toolchain:all")
 
 bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
@@ -92,10 +92,6 @@ TESTS = [
         name = test,
         cargo_lock = "//:%s/Cargo.lock" % test,
         cargo_toml = "//:%s/Cargo.toml" % test,
-        # cargo_config = "//:.cargo/config.toml",
-        # use_home_cargo_credentials = True,
-        #debug = True,
-        use_experimental_platforms = True,
         platform_triples = [
             "aarch64-unknown-linux-gnu",
             "aarch64-apple-darwin",
@@ -104,6 +100,10 @@ TESTS = [
             "x86_64-apple-darwin",
             "x86_64-pc-windows-gnullvm",
         ],
+        # cargo_config = "//:.cargo/config.toml",
+        # use_home_cargo_credentials = True,
+        #debug = True,
+        use_experimental_platforms = True,
     )
     for test in TESTS
 ]
@@ -245,7 +245,7 @@ crate.annotation(
 bazel_dep(name = "mimalloc", version = "2.2.4.bcr.1")
 
 """
-ERROR: /Users/dzbarsky/Library/Caches/bazel/_bazel_dzbarsky/16a3c4547ef278628dec1184581db8ea/external/mimalloc+/BUILD.bazel:77:18: Linking external/mimalloc+/libmimalloc-override.so failed: (Exit 1): clang++ failed: error executing CppLink command (from cc_shared_library rule target @@mimalloc+//:mimalloc-override) external/toolchains_llvm_bootstrapped++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64/bin/clang++ -target aarch64-w64-windows-gnu '--sysroot=/dev/null' '--unwindlib=none' -nostdlib++ ... (remaining 52 arguments skipped)
+ERROR: /Users/dzbarsky/Library/Caches/bazel/_bazel_dzbarsky/16a3c4547ef278628dec1184581db8ea/external/mimalloc+/BUILD.bazel:77:18: Linking external/mimalloc+/libmimalloc-override.so failed: (Exit 1): clang++ failed: error executing CppLink command (from cc_shared_library rule target @@mimalloc+//:mimalloc-override) external/llvm++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64/bin/clang++ -target aarch64-w64-windows-gnu '--sysroot=/dev/null' '--unwindlib=none' -nostdlib++ ... (remaining 52 arguments skipped)
 clang++: error: no such file or directory: 'psapi.lib'
 clang++: error: no such file or directory: 'shell32.lib'
 clang++: error: no such file or directory: 'user32.lib'

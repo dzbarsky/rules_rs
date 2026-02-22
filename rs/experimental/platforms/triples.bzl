@@ -17,10 +17,10 @@ def triple_to_constraint_set(target_triple):
     if t.system in ("linux", "nixos"):
         if t.abi == "musl" or "musl" in target_triple:
             # Rustc passes `-no-pie` on musl so make sure we align.
-            constraints.append("@toolchains_llvm_bootstrapped//constraints/libc:musl")
-            constraints.append("@toolchains_llvm_bootstrapped//constraints/pie:off")
+            constraints.append("@llvm//constraints/libc:musl")
+            constraints.append("@llvm//constraints/pie:off")
         else:
-            constraints.append("@toolchains_llvm_bootstrapped//constraints/libc:gnu.2.28")
+            constraints.append("@llvm//constraints/libc:gnu.2.28")
     elif t.system == "windows":
         constraints.append(_WINDOWS_ABI_CONSTRAINTS[t.abi])
 

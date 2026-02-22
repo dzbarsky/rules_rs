@@ -52,8 +52,8 @@ def declare_rustc_toolchains(
             clippy_driver = "{}clippy_driver_bin".format(clippy_repo_label),
             cargo_clippy = "{}cargo_clippy_bin".format(clippy_repo_label),
             # TODO(zbarsky): Enable these once we ship them.
-            #llvm_cov = "@toolchains_llvm_bootstrapped//tools:llvm-cov",
-            #llvm_profdata = "@toolchains_llvm_bootstrapped//tools:llvm-profdata",
+            #llvm_cov = "@llvm//tools:llvm-cov",
+            #llvm_profdata = "@llvm//tools:llvm-profdata",
             rustc_lib = "{}rustc_lib".format(rustc_repo_label),
             allocator_library = None,
             global_allocator_library = None,

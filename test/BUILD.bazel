@@ -140,7 +140,7 @@ platform(
         "@platforms//os:linux",
         # Note: We need this so that Rust cfg=exec builds (build script, tools, proc_macros)
         # can properly target the remote.
-        "@toolchains_llvm_bootstrapped//constraints/libc:gnu.2.28",
+        "@llvm//constraints/libc:gnu.2.28",
     ],
     exec_properties = {
         "container-image": "docker://ubuntu:22.04",

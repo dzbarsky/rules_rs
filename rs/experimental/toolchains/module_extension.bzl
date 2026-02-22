@@ -82,6 +82,12 @@ def _parse_version(version):
     return base_version, iso_date
 
 def _toolchains_impl(mctx):
+    root_module_name = None
+    for mod in mctx.modules:
+        if mod.is_root:
+            root_module_name = mod.name
+            break
+
     version_tags = []
     had_tags = True
     for mod in mctx.modules:
@@ -235,7 +241,16 @@ def _toolchains_impl(mctx):
                 rustc_repo_build_file = "@rustc_{}_{}//:BUILD.bazel".format(triple_suffix, version_key),
             )
 
-    direct_deps = []
+    host_tools_repository(
+        name = "rs_rust_host_tools",
+        host_cargo_repo = host_cargo_repo,
+        binary_suffix = ".exe" if host_os == "windows" else "",
+    )
+
+    # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
+    # Report it as a direct dependency only for the rules_rs root module so
+    # user modules are not asked to import it.
+    direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
     repo_configs = {}
     for tag in version_tags:
@@ -263,12 +278,6 @@ def _toolchains_impl(mctx):
                 direct_dev_deps.append(repo_name)
         elif repo_name not in direct_deps:
             direct_deps.append(repo_name)
-
-    host_tools_repository(
-        name = "rs_rust_host_tools",
-        host_cargo_repo = host_cargo_repo,
-        binary_suffix = ".exe" if host_os == "windows" else "",
-    )
 
     kwargs = dict(
         reproducible = True,
