@@ -264,7 +264,6 @@ include("//:3rd_party/libz-sys/include.MODULE.bazel")
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
 include("//:3rd_party/windows_x86_64_gnullvm/include.MODULE.bazel")
 include("//:3rd_party/windows_aarch64_gnullvm/include.MODULE.bazel")
-
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz

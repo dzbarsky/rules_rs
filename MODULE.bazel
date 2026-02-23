@@ -34,15 +34,15 @@ use_repo(
         name = "toml2json_" + name,
         executable = True,
         sha256 = sha256,
-        url = "https://github.com/dzbarsky/toml2json/releases/download/v0.0.7/toml2json_" + name + ext,
+        url = "https://github.com/dzbarsky/toml2json/releases/download/v0.0.11/toml2json_" + name + ext,
     )
     for name, sha256, ext in [
-        ("darwin_amd64", "e2240483b28d95c7ae9ded7fb0e921142a644d6847c1da9b44ae3557117ed54f", ""),
-        ("darwin_arm64", "20dd55c9d926a00b51c643a3c5677678eb5ddb8984ae2ad9cf3f701ccbb06d92", ""),
-        ("linux_amd64", "f074ff54589ca601a491d3f8e33b9618d861d19d8e2359a0addf02d378f36c7c", ""),
-        ("linux_arm64", "3f35040836858b5c1703be421ea1c06f83c68b6c14da37d0ee0655db891f125f", ""),
-        ("windows_amd64", "7e5561170e088c717f87ba4c05ec6d3a0406b62133959530c2f4646158c27a97", ".exe"),
-        ("windows_arm64", "bc6fbf776798a7beb7cb2b3feb898fcbc829b4106f0505cd08f251e7c1b2518e", ".exe"),
+        ("darwin_amd64", "3fad1d4314fec5074b635ba3e5b31d578e2539137a017092bf364672a3c9676a", ""),
+        ("darwin_arm64", "6d9ac7a19c738771233192db058f74af1e6963e78147adef68d3463b6736fdd1", ""),
+        ("linux_amd64", "06847d7e1319623cce0b5d5170d5e5302358966124308bd031a9e906dbf88ff4", ""),
+        ("linux_arm64", "e545383759bfb9ac535e43fbee372d390dff654e7e222f452ac12f921fb0b928", ""),
+        ("windows_amd64", "8c8f133188c0225ada9ce0febd907396d0bdc28c9a5efa7abb27420079c02ead", ".exe"),
+        ("windows_arm64", "2fd541cac2fef4ce836947de34eb815de64f457888969e845321937d3b980269", ".exe"),
     ]
 ]
 
