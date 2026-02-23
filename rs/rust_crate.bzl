@@ -36,7 +36,6 @@ def rust_crate(
         is_proc_macro,
         binaries,
         use_experimental_platforms):
-
     package_metadata(
         name = name + "_package_metadata",
         # TODO(zbarsky): repository url for git deps?
@@ -74,46 +73,58 @@ def rust_crate(
     build_script_target_tags = crate_tags + build_script_tags
 
     if build_script:
-        branches = {}
-
-        # The build script is cfg-exec, but the features must be selected according to the target. The easiest way to
-        # do this is to stamp out a build script per target with the right feature set, and then select among them.
-        for triple in triples:
-            build_script_name = name + "_" + triple + "_build_script"
-            branches[_platform(triple, use_experimental_platforms)] = build_script_name
-
-            _build_script(
-                name = build_script_name,
-                build_deps = build_deps,
-                aliases = aliases,
-                compile_data = compile_data,
-                crate_features = crate_features + conditional_crate_features.get(triple, []),
-                crate_name = "build_script_build",
-                crate_root = build_script,
-                links = links,
-                data = compile_data + build_script_data,
-                link_deps = deps,
-                build_script_env = build_script_env,
-                build_script_env_files = ["cargo_toml_env_vars.env"],
-                toolchains = build_script_toolchains,
-                tools = build_script_tools,
-                edition = edition,
-                pkg_name = crate_name,
-                rustc_env_files = ["cargo_toml_env_vars.env"],
-                rustc_flags = ["--cap-lints=allow"],
-                srcs = srcs,
-                target_compatible_with = target_compatible_with,
-                tags = build_script_target_tags + ["manual"],
-                version = version,
-            )
-
-        native.alias(
-            name = name + "_build_script",
-            actual = select(branches),
-            tags = build_script_target_tags,
+        build_script_kwargs = dict(
+            build_deps = build_deps,
+            aliases = aliases,
+            compile_data = compile_data,
+            crate_name = "build_script_build",
+            crate_root = build_script,
+            links = links,
+            data = compile_data + build_script_data,
+            link_deps = deps,
+            build_script_env = build_script_env,
+            build_script_env_files = ["cargo_toml_env_vars.env"],
+            toolchains = build_script_toolchains,
+            tools = build_script_tools,
+            edition = edition,
+            pkg_name = crate_name,
+            rustc_env_files = ["cargo_toml_env_vars.env"],
+            rustc_flags = ["--cap-lints=allow"],
+            srcs = srcs,
+            target_compatible_with = target_compatible_with,
+            tags = build_script_target_tags + ["manual"],
+            version = version,
         )
 
-        maybe_build_script = [name + "_build_script"]
+        if conditional_crate_features:
+            branches = {}
+
+            # The build script is cfg-exec, but the features must be selected according to the target.
+            # Only stamp out one target per triple when there are per-platform feature deltas.
+            for triple in triples:
+                build_script_name = "_bs_" + triple
+                branches[_platform(triple, use_experimental_platforms)] = build_script_name
+
+                _build_script(
+                    name = build_script_name,
+                    crate_features = crate_features + conditional_crate_features.get(triple, []),
+                    **build_script_kwargs
+                )
+
+            native.alias(
+                name = "_bs",
+                actual = select(branches),
+                tags = build_script_target_tags,
+            )
+
+        else:
+            _build_script(
+                name = "_bs",
+                crate_features = crate_features,
+                **build_script_kwargs
+            )
+
+        maybe_build_script = ["_bs"]
     else:
         maybe_build_script = []
 
@@ -179,10 +190,9 @@ def rust_crate(
         )
 
 def _build_script(
-    name,
-    build_deps,
-    **kwargs,
-):
+        name,
+        build_deps,
+        **kwargs):
     rust_deps(
         name = name + "_deps",
         deps = build_deps,
@@ -198,5 +208,5 @@ def _build_script(
         name = name,
         deps = [name + "_deps"],
         proc_macro_deps = [name + "_proc_macro_deps"],
-        **kwargs,
+        **kwargs
     )
