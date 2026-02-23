@@ -40,6 +40,7 @@ rust_binary(
     srcs = ["main.rs"],
     deps = [
         "@many_workspace_deps//:actix-web",
+        "@many_workspace_deps//:apriltag",
         "@many_workspace_deps//:apple-codesign",
         "@many_workspace_deps//:axum",
         "@many_workspace_deps//:ballista",
