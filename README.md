@@ -208,6 +208,7 @@ See https://registry.bazel.build/docs/rules_rs
 - [Aspect CLI](https://github.com/aspect-build/aspect-cli)
 - [Datadog Agent](https://github.com/DataDog/datadog-agent)
 - [ZML](https://github.com/zml/zml/tree/zml/v2)
+- [rules_py](https://github.com/aspect-build/rules_py)
 
 ## Telemetry & privacy policy
 
