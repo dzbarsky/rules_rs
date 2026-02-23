@@ -164,6 +164,7 @@ crate.annotation(
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): alsa-sys is not curently tested, fix it
