@@ -132,6 +132,13 @@ TODO(zbarsky): Should we issue warnings if you configure the triples in an unexp
 
 ```bzl
 rules_rust = use_extension("@rules_rs//rs/experimental:rules_rust.bzl", "rules_rust")
+
+# Optional: apply additional patches to the pinned rules_rust archive.
+rules_rust.patch(
+    patches = ["//:my_rules_rust_fix.patch"],
+    strip = 1,
+)
+
 use_repo(rules_rust, "rules_rust")
 ```
 
