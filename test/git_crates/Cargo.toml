@@ -14,6 +14,7 @@ pm-bin = { git = "https://bitbucket.org/fm-elpac/pm-bin.git", rev = "0c313d913c3
 tokenizers = { git = "https://github.com/huggingface/tokenizers", rev = "007fc767ac78fe4ec43c6790afbee5063157fc62" }
 # TODO(zbarsky): Can remov this one bitflags handling above is fixed
 o2o = { git = "https://github.com/Artem-Romanenia/o2o", rev = "3fa37f788547fdeb50750e307f861d2d86f37ec8"}
+vrl = { git = "https://github.com/vectordotdev/vrl.git", rev = "195f1ed6a334978a8b5d318030b606a902973351" }
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter", package = "wirefilter-engine" }
 
 [target.'cfg(unix)'.dependencies]

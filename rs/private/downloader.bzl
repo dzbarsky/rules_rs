@@ -333,6 +333,8 @@ def download_metadata_for_git_crates(
                 package["workspace_cargo_toml_json"] = cargo_toml_json
             else:
                 package["cargo_toml_json"] = cargo_toml_json
+                if cargo_toml_json.get("workspace"):
+                    package["workspace_cargo_toml_json"] = cargo_toml_json
 
     for source, clone_state in state.pending_git_clones_by_source.items():
         clone_dir = mctx.path(_sanitize_path_fragment(source))
@@ -371,6 +373,8 @@ def download_metadata_for_git_crates(
                 package["cargo_toml_json"] = run_toml2json(mctx, child_cargo_toml_path)
             else:
                 package["cargo_toml_json"] = cargo_toml_json
+                if cargo_toml_json.get("workspace"):
+                    package["workspace_cargo_toml_json"] = cargo_toml_json
 
 def download_sparse_registry_configs(mctx, state):
     # Hardcoded one to avoid the fetch...
