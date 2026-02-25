@@ -770,10 +770,7 @@ def aliases(package_name = None):
 def all_crate_deps(
         normal = False,
         normal_dev = False,
-        proc_macro = False,
-        proc_macro_dev = False,
         build = False,
-        build_proc_macro = False,
         package_name = None,
         cargo_only = False):
 
@@ -785,10 +782,7 @@ def all_crate_deps(
         dep_data,
         normal = normal,
         normal_dev = normal_dev,
-        proc_macro = proc_macro,
-        proc_macro_dev = proc_macro_dev,
         build = build,
-        build_proc_macro = build_proc_macro,
         filter_prefix = {this_repo} if cargo_only else None,
     )
 
@@ -1130,9 +1124,6 @@ _annotation = tag_class(
         # "build_script_link_deps": _relative_label_list(
         #     doc = "A list of labels to add to a crate's `cargo_build_script::link_deps` attribute.",
         # ),
-        # "build_script_proc_macro_deps": _relative_label_list(
-        #     doc = "A list of labels to add to a crate's `cargo_build_script::proc_macro_deps` attribute.",
-        # ),
         # "build_script_rundir": attr.string(
         #     doc = "An override for the build script's rundir attribute.",
         # ),
@@ -1213,9 +1204,6 @@ _annotation = tag_class(
         "patches": attr.label_list(
             doc = "The `patches` attribute of a Bazel repository rule. See [http_archive.patches](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patches)",
         ),
-        # "proc_macro_deps": _relative_label_list(
-        #     doc = "A list of labels to add to a crate's `rust_library::proc_macro_deps` attribute.",
-        # ),
         # "rustc_env": attr.string_dict(
         #     doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
         # ),

@@ -7,5 +7,4 @@ rust_test(
     aliases = aliases(),
     srcs = ["src/lib.rs"],
     deps = all_crate_deps(normal = True),
-    proc_macro_deps = all_crate_deps(proc_macro = True),
 )

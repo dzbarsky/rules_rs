@@ -39,7 +39,6 @@ rust_library(
     srcs = ["src/lib.rs"],
     aliases = aliases(),
     deps = all_crate_deps(normal = True),
-    proc_macro_deps = all_crate_deps(proc_macro = True),
 )
 
 rust_binary(

@@ -10,7 +10,7 @@ bzl_library(
     name = "all_crate_deps",
     srcs = ["all_crate_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [":rust_deps"],
+    deps = [],
 )
 
 bzl_library(
@@ -65,17 +65,6 @@ bzl_library(
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [":semver"],
-)
-
-bzl_library(
-    name = "rust_deps",
-    srcs = ["rust_deps.bzl"],
-    visibility = ["//rs:__subpackages__"],
-    # keep
-    deps = [
-        "@rules_cc//cc/common",
-        "@rules_rust//rust:bzl_lib",
-    ],
 )
 
 bzl_library(

@@ -3,7 +3,6 @@ load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
-load("//rs/private:rust_deps.bzl", "rust_deps")
 
 def _platform(triple, use_experimental_platforms):
     if use_experimental_platforms:
@@ -105,7 +104,7 @@ def rust_crate(
                 build_script_name = "_bs_" + triple
                 branches[_platform(triple, use_experimental_platforms)] = build_script_name
 
-                _build_script(
+                cargo_build_script(
                     name = build_script_name,
                     crate_features = crate_features + conditional_crate_features.get(triple, []),
                     **build_script_kwargs
@@ -118,7 +117,7 @@ def rust_crate(
             )
 
         else:
-            _build_script(
+            cargo_build_script(
                 name = "_bs",
                 crate_features = crate_features,
                 **build_script_kwargs
@@ -128,18 +127,7 @@ def rust_crate(
     else:
         maybe_build_script = []
 
-    rust_deps(
-        name = name + "_deps",
-        deps = deps,
-    )
-
-    rust_deps(
-        name = name + "_proc_macro_deps",
-        deps = deps,
-        proc_macros = True,
-    )
-
-    deps = [name + "_deps"] + maybe_build_script
+    deps = deps + maybe_build_script
 
     kwargs = dict(
         name = name,
@@ -150,7 +138,6 @@ def rust_crate(
         aliases = aliases,
         deps = deps,
         data = data,
-        proc_macro_deps = [name + "_proc_macro_deps"],
         crate_features = crate_features + select(
             {_platform(k, use_experimental_platforms): v for k, v in conditional_crate_features.items()} |
             {"//conditions:default": []},
@@ -189,24 +176,3 @@ def rust_crate(
             visibility = ["//visibility:public"],
         )
 
-def _build_script(
-        name,
-        build_deps,
-        **kwargs):
-    rust_deps(
-        name = name + "_deps",
-        deps = build_deps,
-    )
-
-    rust_deps(
-        name = name + "_proc_macro_deps",
-        deps = build_deps,
-        proc_macros = True,
-    )
-
-    cargo_build_script(
-        name = name,
-        deps = [name + "_deps"],
-        proc_macro_deps = [name + "_proc_macro_deps"],
-        **kwargs
-    )

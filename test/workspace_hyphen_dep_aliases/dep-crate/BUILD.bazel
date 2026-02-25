@@ -10,5 +10,4 @@ rust_library(
     edition = "2024",
     aliases = aliases(),
     deps = all_crate_deps(normal = True),
-    proc_macro_deps = all_crate_deps(proc_macro = True),
 )
