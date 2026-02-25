@@ -27,7 +27,7 @@ def _rules_rust_impl(mctx):
     if len(strip_values) > 1:
         fail("Found conflicting strip values in rules_rust.patch tags")
 
-    strip = list(strip_values)()[0] if strip_values else 0
+    strip = list(strip_values)[0] if strip_values else 0
 
     http_archive(
         name = "rules_rust",
