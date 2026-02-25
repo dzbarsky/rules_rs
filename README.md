@@ -216,6 +216,7 @@ See https://registry.bazel.build/docs/rules_rs
 - [Datadog Agent](https://github.com/DataDog/datadog-agent)
 - [ZML](https://github.com/zml/zml/tree/zml/v2)
 - [rules_py](https://github.com/aspect-build/rules_py)
+- [JetBrains](https://github.com/JetBrains/intellij-community), used in closed sources of [JetBrains Air](https://air.dev/) especially
 
 ## Telemetry & privacy policy
 
