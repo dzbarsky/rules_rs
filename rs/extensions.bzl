@@ -542,12 +542,16 @@ def _generate_hub_and_spokes(
                 if version_key not in target_versions:
                     continue
                 target_versions = [version_key]
-            if not annotation.crate_features:
+            if not annotation.crate_features and not annotation.crate_features_select:
                 continue
             for version in target_versions:
                 features_enabled = feature_resolutions_by_fq_crate[_fq_crate(crate, version)].features_enabled
-                for triple in platform_triples:
-                    features_enabled[triple].update(annotation.crate_features)
+                if annotation.crate_features:
+                    for triple in platform_triples:
+                        features_enabled[triple].update(annotation.crate_features)
+                for triple, features in annotation.crate_features_select.items():
+                    if triple in features_enabled:
+                        features_enabled[triple].update(features)
 
     _date(mctx, "set up initial deps!")
 
@@ -622,6 +626,7 @@ crate.annotation(
             build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
             rustc_flags = annotation.rustc_flags,
+            rustc_flags_select = annotation.rustc_flags_select,
             data = annotation.data,
             deps = annotation.deps,
             crate_tags = annotation.tags,
@@ -1154,6 +1159,9 @@ _annotation = tag_class(
         "crate_features": attr.string_list(
             doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute.",
         ),
+        "crate_features_select": attr.string_list_dict(
+            doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute. Keys should be the platform triplet. Value should be a list of features.",
+        ),
         "data": _relative_label_list(
             doc = "A list of labels to add to a crate's `rust_library::data` attribute.",
         ),
@@ -1212,6 +1220,9 @@ _annotation = tag_class(
         # ),
         "rustc_flags": attr.string_list(
             doc = "A list of strings to set on a crate's `rust_library::rustc_flags` attribute.",
+        ),
+        "rustc_flags_select": attr.string_list_dict(
+            doc = "A list of strings to set on a crate's `rust_library::rustc_flags` attribute. Keys should be the platform triplet. Value should be a list of flags.",
         ),
         # "shallow_since": attr.string(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",

@@ -73,7 +73,7 @@ def rust_crate(
 
     if build_script:
         build_script_kwargs = dict(
-            build_deps = build_deps,
+            deps = build_deps,
             aliases = aliases,
             compile_data = compile_data,
             crate_name = "build_script_build",

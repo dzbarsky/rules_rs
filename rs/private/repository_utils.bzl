@@ -1,4 +1,3 @@
-
 load(":semver.bzl", "parse_full_version")
 
 def _platform(triple, use_experimental_platforms):
@@ -141,7 +140,7 @@ rust_crate(
     conditional_crate_features = {conditional_crate_features},
     crate_root = {crate_root},
     edition = {edition},
-    rustc_flags = {rustc_flags},
+    rustc_flags = {rustc_flags}{conditional_rustc_flags},
     tags = {tags},
     target_compatible_with = RESOLVED_PLATFORMS,
     links = {links},
@@ -175,6 +174,7 @@ rust_crate(
     build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_experimental_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_experimental_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_experimental_platforms)
+    rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_experimental_platforms)
     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_experimental_platforms)
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_experimental_platforms)
@@ -195,7 +195,8 @@ rust_crate(
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = repr(crate_root),
         edition = repr(edition),
-        rustc_flags = repr(attr.rustc_flags or []),
+        rustc_flags = repr(rustc_flags),
+        conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
         links = repr(links),
         build_script = repr(build_script),
@@ -230,6 +231,7 @@ common_attrs = {
     "build_script_tools_select": attr.string_list_dict(),
     "build_script_tags": attr.string_list(),
     "rustc_flags": attr.string_list(),
+    "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),
     "data": attr.label_list(default = []),
     "deps": attr.string_list(default = []),

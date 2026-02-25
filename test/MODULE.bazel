@@ -114,7 +114,13 @@ crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
     crate_features = ["fips"],
+    crate_features_select = {
+        "x86_64-unknown-linux-gnu": ["fips"],
+    },
     repositories = ["annotation_crate_features"],
+    rustc_flags_select = {
+        "x86_64-unknown-linux-gnu": ["--cfg=rules_rs_annotation_smoke"],
+    },
 )
 crate.annotation(
     # Smoketest that we do something reasonable with this attribute
