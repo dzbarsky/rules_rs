@@ -37,7 +37,7 @@ def declare_rustfmt_toolchains(
             name = rustfmt_toolchain_name,
             rustfmt = "{}rustfmt_bin".format(rustfmt_repo_label),
             rustc = "{}rustc".format(rustc_repo_label),
-            rustc_lib = "{}rustc_lib".format(rustc_repo_label),
+            rustc_lib = "{}rustc_lib".format(rustfmt_repo_label),
             visibility = ["//visibility:public"],
             tags = ["rust_version={}".format(version)],
         )

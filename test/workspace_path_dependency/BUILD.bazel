@@ -1,4 +1,5 @@
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_clippy", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,4 +8,14 @@ rust_binary(
     srcs = ["app/src/main.rs"],
     edition = "2024",
     deps = ["@workspace_path_dependency//:itoa"],
+)
+
+rustfmt_test(
+    name = "workspace_path_demo_rustfmt_test",
+    targets = [":workspace_path_demo"],
+)
+
+rust_clippy(
+    name = "workspace_path_demo_clippy_test",
+    deps = [":workspace_path_demo"],
 )
