@@ -86,6 +86,22 @@ genquery(
     }),
 )
 
+genquery(
+    name = "cfg_feature_target_dep_inner_deps",
+    expression = "deps(@cfg_feature_target_dep//:inner-0.1.0)",
+    scope = ["@cfg_feature_target_dep//:inner-0.1.0"],
+)
+
+genrule(
+    name = "verify_cfg_feature_target_dep",
+    srcs = [":cfg_feature_target_dep_inner_deps"],
+    outs = ["verify_cfg_feature_target_dep.txt"],
+    cmd = """
+        grep '@@rules_rs++crate+cfg_feature_target_dep//:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
+        echo ok > $@
+    """,
+)
+
 genrule(
     name = "verify_annotation_tags",
     srcs = [
@@ -108,6 +124,7 @@ filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":rust_binary",
+        ":verify_cfg_feature_target_dep",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({
         "@platforms//os:windows": [],

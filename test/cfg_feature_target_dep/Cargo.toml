@@ -1,0 +1,9 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+inner = { path = "inner", features = ["with_itoa"] }

@@ -1,3 +1,5 @@
+load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
+
 def _count(feature_resolutions_by_fq_crate):
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
@@ -13,7 +15,22 @@ def _count(feature_resolutions_by_fq_crate):
         # No need to count aliases, they only get set when deps are set.
     return n
 
-def _resolve_one_round(packages, dirty_package_indices, debug):
+def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_triple):
+    remaining = dep["target"]
+    if triple not in remaining:
+        return False
+
+    if not dep.get("feature_sensitive", False):
+        return True
+
+    cfg_attr = cfg_attrs_by_triple[triple]
+    return bool(cfg_matches_expr_for_cfg_attrs(
+        dep["target_expr"],
+        [cfg_attr],
+        features = package_feature_set,
+    ).matches)
+
+def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug):
     new_dirty_package_indices = set()
 
     for index in dirty_package_indices:
@@ -31,6 +48,7 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
             package,
             features_enabled,
             feature_resolutions,
+            cfg_attrs_by_triple,
             debug,
         ):
             package_changed = True
@@ -50,9 +68,16 @@ def _resolve_one_round(packages, dirty_package_indices, debug):
             prefixed_dep_alias = "dep:" + dep_name
             optional = dep.get("optional", False)
 
-            to_remove = None
-            match = dep["target"]
+            if dep.get("feature_sensitive"):
+                match = set([
+                    triple
+                    for triple in dep["target"]
+                    if _dep_target_matches_triple(dep, triple, features_enabled[triple], cfg_attrs_by_triple)
+                ])
+            else:
+                match = dep["target"]
 
+            to_remove = None
             for triple in match:
                 if optional:
                     features_for_triple = features_enabled[triple]
@@ -96,6 +121,7 @@ def _propagate_feature_enablement(
         package,
         features_enabled,
         feature_resolutions,
+        cfg_attrs_by_triple,
         debug):
     possible_features = feature_resolutions.possible_features
 
@@ -128,7 +154,7 @@ def _propagate_feature_enablement(
 
                 found = False
                 for dep in feature_resolutions.possible_deps:
-                    if dep_name == dep["name"] and triple in dep["target"]:
+                    if dep_name == dep["name"] and _dep_target_matches_triple(dep, triple, feature_set, cfg_attrs_by_triple):
                         found = True
                         dep_optional = dep.get("optional", False)
                         if not optional_marker or not dep_optional or dep_name in feature_set or ("dep:" + dep_name) in feature_set:
@@ -151,13 +177,13 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 50
 
-def resolve(mctx, packages, feature_resolutions_by_fq_crate, debug):
+def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug):
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
     for i in range(_MAX_ROUNDS):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, debug)
+        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug)
         if not dirty_package_indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)

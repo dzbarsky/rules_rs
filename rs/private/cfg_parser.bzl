@@ -71,6 +71,7 @@ def cfg_parse(expr):
     frames = [{"fn": "__ROOT__", "args": []}]
     pending_ident = None
     pending_eq_key = None
+    uses_feature_cfg = False
 
     for t in tokens:
         kind = t["t"]
@@ -90,7 +91,7 @@ def cfg_parse(expr):
             if not pending_eq_key:
                 fail("cfg parse error: string literal not expected here.")
             if pending_eq_key == "feature":
-                fail("Feature evaluation in cfg is unsupported!")
+                uses_feature_cfg = True
             frames[-1]["args"].append({
                 "kind": "eq",
                 "key": pending_eq_key,
@@ -138,7 +139,7 @@ def cfg_parse(expr):
             fail("cfg parse error: empty expression.")
         fail("cfg parse error: multiple top-level expressions; wrap with all(...)/any(...).")
 
-    return root_args[0]
+    return root_args[0], uses_feature_cfg
 
 ############################################
 # Triple → cfg attribute derivation
@@ -192,7 +193,18 @@ def _abi_from_env(env):
             return abi_piece
     return ""
 
-def triple_to_cfg_attrs(triple, features, target_features):
+def _target_has_feature(ctx, feature):
+    # x86_64 baseline implies SSE2.
+    if feature == "sse2":
+        return ctx["target_arch"] == "x86_64"
+
+    # AArch64 baseline implies NEON.
+    if feature == "neon":
+        return ctx["target_arch"] == "aarch64"
+
+    return False
+
+def triple_to_cfg_attrs(triple):
     parts = triple.split("-")
     arch_part = _get(parts, 0, "")
     vendor_part = _get(parts, 1, "unknown")
@@ -221,22 +233,17 @@ def triple_to_cfg_attrs(triple, features, target_features):
         "false": False,
         "unix": fam == "unix",
         "windows": fam == "windows",
-
-        # feature sets
-        #"__features__": dict(((f, True) for f in features)),
-        #"__tfeatures__": dict(((tf, True) for tf in target_features)),
     }
 
 ############################################
 # Evaluator (non-recursive; explicit stack)
 ############################################
 
-def _eval_eq(ctx, key, value):
+def _eval_eq(ctx, key, value, features):
     if key == "feature":
-        return ctx.get("__features__", {}).get(value, False)
+        return value in features
     if key == "target_feature":
-        return ctx.get("__tfeatures__",
-                       {}).get(value, False)
+        return _target_has_feature(ctx, value)
     known = [
         "target_os","target_family","target_arch","target_env",
         "target_vendor","target_endian","target_pointer_width","target_abi",
@@ -251,7 +258,7 @@ def _eval_pred(ctx, name):
     return ctx.get(name, False)
 
 
-def _cfg_eval(ast, ctx):
+def _cfg_eval(ast, ctx, features=[]):
     todo = [{"op": "VISIT", "node": ast}]
     results = []
     for _ in range(200000):
@@ -265,7 +272,7 @@ def _cfg_eval(ast, ctx):
             if kind == "pred":
                 results.append(_eval_pred(ctx, node["name"]))
             elif kind == "eq":
-                results.append(_eval_eq(ctx, node["key"], node["value"]))
+                results.append(_eval_eq(ctx, node["key"], node["value"], features))
             else:
                 children = node["args"]
                 n = len(children)
@@ -299,20 +306,28 @@ def _cfg_eval(ast, ctx):
         fail("cfg eval error: unexpected result stack size.")
     return results[0]
 
-def cfg_matches(expr, triple, features=[], target_features=[]):
-    ast = cfg_parse(expr)
-    ctx = triple_to_cfg_attrs(triple, features, target_features)
-    return _cfg_eval(ast, ctx)
+def cfg_matches(expr, triple, features=[]):
+    ast, _ = cfg_parse(expr)
+    ctx = triple_to_cfg_attrs(triple)
+    return _cfg_eval(ast, ctx, features)
 
-def cfg_matches_expr_for_triples(expr, triples, features=[], target_features=[]):
-    cfg_attrs = [triple_to_cfg_attrs(triple, features, target_features) for triple in triples]
-    return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features, target_features)
+def cfg_matches_expr_for_triples(expr, triples, features=[]):
+    cfg_attrs = [triple_to_cfg_attrs(triple) for triple in triples]
+    return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features)
 
-def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[], target_features=[]):
+def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[]):
     if expr.startswith("cfg("):
-        return cfg_matches_ast_for_triples(cfg_parse(expr), cfg_attrs)
-    # Cargo target table keys that aren't cfg(...) are literal triples.
-    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_attr["_triple"] == expr]
+        ast, uses_feature_cfg = cfg_parse(expr)
+        return struct(
+            matches = cfg_matches_ast_for_triples(ast, cfg_attrs, features),
+            uses_feature_cfg = uses_feature_cfg,
+        )
+    else:
+        # Cargo target table keys that aren't cfg(...) are literal triples.
+        return struct(
+            matches = [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_attr["_triple"] == expr],
+            uses_feature_cfg = False,
+        )
 
-def cfg_matches_ast_for_triples(ast, cfg_attrs):
-    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr)]
+def cfg_matches_ast_for_triples(ast, cfg_attrs, features=[]):
+    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr, features)]

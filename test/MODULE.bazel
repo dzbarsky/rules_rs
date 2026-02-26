@@ -73,6 +73,7 @@ TESTS = [
     "build_script_env_select",
     "build_script_runtime_env",
     "build_dep_features",
+    "cfg_feature_target_dep",
     "empty_workspace",
     "feature_name_overrides_implicit_dep",
     "git_crates",

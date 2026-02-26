@@ -1,0 +1,12 @@
+[package]
+name = "inner"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[features]
+with_itoa = []
+
+[target.'cfg(feature = "with_itoa")'.dependencies]
+itoa = "1.0.15"

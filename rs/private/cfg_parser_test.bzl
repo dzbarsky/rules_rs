@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_triples")
+load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs", "cfg_matches_expr_for_cfg_attrs")
 
 def _cfg(expr):
     return "cfg(%s)" % expr
@@ -48,23 +48,51 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg("any(true, false)"), mac))
     asserts.true(env, cfg_matches(_cfg("all(true)"), mac))
     asserts.false(env, cfg_matches(_cfg("all(true, false)"), mac))
+    asserts.true(env, cfg_matches(_cfg('feature = "serde"'), mac, features = ["serde"]))
+    asserts.false(env, cfg_matches(_cfg('feature = "serde"'), mac))
+    asserts.true(env, cfg_matches(_cfg('target_feature = "sse2"'), linux_gnu))
+    asserts.false(env, cfg_matches(_cfg('target_feature = "sse2"'), mac))
 
     triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm]
 
     results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
-    asserts.equals(env, results, [linux_gnu, linux_musl])
+    asserts.equals(env, results.matches, [linux_gnu, linux_musl])
 
     results = cfg_matches_expr_for_triples(
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
         triples)
-    asserts.equals(env, results, triples)
+    asserts.equals(env, results.matches, triples)
 
     # Cargo dependencies can target a specific triple instead of a cfg expression.
     results = cfg_matches_expr_for_triples(win_gnullvm, triples)
-    asserts.equals(env, results, [win_gnullvm])
+    asserts.equals(env, results.matches, [win_gnullvm])
 
     results = cfg_matches_expr_for_triples(_cfg('all(target_os = "windows", any(target_env = "msvc", target_env = "gnu", target_env = "gnullvm"))'), triples)
-    asserts.equals(env, results, [win, win_gnu, win_gnullvm])
+    asserts.equals(env, results.matches, [win, win_gnu, win_gnullvm])
+
+    results = cfg_matches_expr_for_triples(_cfg('feature = "serde"'), triples, features = ["serde"])
+    asserts.equals(env, results.matches, triples)
+
+    results = cfg_matches_expr_for_triples(_cfg('feature = "serde"'), triples)
+    asserts.equals(env, results.matches, [])
+
+    info = cfg_matches_expr_for_cfg_attrs(
+        _cfg('all(feature = "serde", target_feature = "sse2")'),
+        [triple_to_cfg_attrs(linux_gnu)],
+    )
+    asserts.true(env, info.uses_feature_cfg)
+    asserts.equals(env, info.matches, [])
+
+    info = cfg_matches_expr_for_cfg_attrs(win_gnullvm, [triple_to_cfg_attrs(win_gnullvm)])
+    asserts.false(env, info.uses_feature_cfg)
+    asserts.equals(env, info.matches, [win_gnullvm])
+
+    info = cfg_matches_expr_for_cfg_attrs(
+        _cfg('target_feature = "sse2"'),
+        [triple_to_cfg_attrs(linux_gnu)],
+    )
+    asserts.false(env, info.uses_feature_cfg)
+    asserts.equals(env, info.matches, [linux_gnu])
 
     return unittest.end(env)
 

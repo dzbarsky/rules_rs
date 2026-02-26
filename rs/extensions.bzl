@@ -31,6 +31,15 @@ def _platform(triple, use_experimental_platforms):
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}
 
+def _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
+    match_info = cfg_match_cache.get(target)
+    if match_info:
+        return match_info
+
+    match_info = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+    cfg_match_cache[target] = match_info
+    return match_info
+
 def _add_to_dict(d, k, v):
     existing = d.get(k, [])
     if not existing:
@@ -248,14 +257,17 @@ def _generate_hub_and_spokes(
         pkg["local_path"] = local_path
         packages.append(pkg)
 
-    platform_cfg_attrs = [triple_to_cfg_attrs(triple, [], []) for triple in platform_triples]
+    platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
+    platform_cfg_attrs_by_triple = {}
+    for cfg_attr in platform_cfg_attrs:
+        platform_cfg_attrs_by_triple[cfg_attr["_triple"]] = cfg_attr
 
     mctx.report_progress("Computing dependencies and features")
 
     feature_resolutions_by_fq_crate = dict()
 
     # TODO(zbarsky): Would be nice to resolve for _ALL_PLATFORMS instead of per-triple, but it's complicated.
-    cfg_match_cache = {None: platform_triples}
+    cfg_match_cache = {None: struct(matches = platform_triples, uses_feature_cfg = False)}
 
     versions_by_name = dict()
     for package_index in range(len(packages)):
@@ -451,15 +463,13 @@ def _generate_hub_and_spokes(
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
-            match = cfg_match_cache.get(target)
-            if not match:
-                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-
-                # TODO(zbarsky): Figure out how to do this optimization safely.
-                #if len(match) == len(platform_cfg_attrs):
-                #    match = match_all
-                cfg_match_cache[target] = match
-            dep["target"] = set(match)
+            match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
+            if match_info.uses_feature_cfg:
+                dep["target_expr"] = target
+                dep["feature_sensitive"] = True
+                dep["target"] = set(platform_triples)
+            else:
+                dep["target"] = set(match_info.matches)
 
     _date(mctx, "set up resolutions")
 
@@ -521,16 +531,9 @@ def _generate_hub_and_spokes(
             versions.add(dep_fq)
 
             target = dep.get("target")
-            match = cfg_match_cache.get(target)
-            if not match:
-                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
+            match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
 
-                # TODO(zbarsky): Figure out how to do this optimization safely.
-                #if len(match) == len(platform_cfg_attrs):
-                #    match = match_all
-                cfg_match_cache[target] = match
-
-            for triple in match:
+            for triple in match_info.matches:
                 workspace_dep_labels_by_triple[triple].add(":" + dep_name)
                 feature_resolutions.features_enabled[triple].update(features)
 
@@ -555,7 +558,7 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "set up initial deps!")
 
-    resolve(mctx, packages, feature_resolutions_by_fq_crate, debug)
+    resolve(mctx, packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
 
     # Validate that we aren't trying to enable any `dep:foo` features that were not even in the lockfile.
     for package in packages:
@@ -839,14 +842,8 @@ RESOLVED_PLATFORMS = select({{
                 bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
 
             target = dep.get("target")
-            match = cfg_match_cache.get(target)
-            if not match:
-                match = cfg_matches_expr_for_cfg_attrs(target, platform_cfg_attrs)
-
-                # TODO(zbarsky): Figure out how to do this optimization safely.
-                #if len(match) == len(platform_cfg_attrs):
-                #    match = match_all
-                cfg_match_cache[target] = match
+            match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
+            match = match_info.matches
 
             kind = dep["kind"]
             if kind == "dev":
