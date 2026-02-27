@@ -49,6 +49,15 @@ def _add_to_dict(d, k, v):
 def _fq_crate(name, version):
     return name + "-" + version
 
+_INTERNAL_RUSTC_PLACEHOLDER_CRATES = [
+    "rustc-std-workspace-alloc",
+    "rustc-std-workspace-core",
+    "rustc-std-workspace-std",
+]
+
+def _is_internal_rustc_placeholder(crate_name):
+    return crate_name in _INTERNAL_RUSTC_PLACEHOLDER_CRATES
+
 def _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
     return struct(
         features_enabled = {triple: set() for triple in platform_triples},
@@ -144,6 +153,53 @@ Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
 
         return inherited
     return _spec_to_dep_dict_inner(dep, spec, is_build)
+
+def _cargo_metadata_dep_to_dep_dict(dep):
+    rename = dep.get("rename")
+    converted = {
+        "name": rename or dep["name"],
+        "optional": dep.get("optional", False),
+        "default_features": dep.get("uses_default_features", True),
+        "features": list(dep.get("features", [])),
+    }
+
+    req = dep.get("req")
+    if req:
+        converted["req"] = req
+
+    kind = dep.get("kind")
+    if kind and kind != "normal":
+        converted["kind"] = kind
+
+    target = dep.get("target")
+    if target:
+        converted["target"] = target
+
+    if rename:
+        converted["package"] = dep["name"]
+
+    return converted
+
+def _prepare_possible_deps(dependencies, converter = None):
+    possible_deps = []
+
+    for dep in dependencies:
+        if converter:
+            dep = converter(dep)
+
+        if dep.get("kind") == "dev":
+            continue
+
+        dep_package = dep.get("package") or dep["name"]
+        if _is_internal_rustc_placeholder(dep_package):
+            continue
+
+        if dep.get("default_features", True):
+            _add_to_dict(dep, "features", "default")
+
+        possible_deps.append(dep)
+
+    return possible_deps
 
 def _generate_hub_and_spokes(
         mctx,
@@ -404,27 +460,49 @@ def _generate_hub_and_spokes(
             fail("Unknown source %s for crate %s" % (source, name))
 
         possible_features = fact["features"]
-        possible_deps = [
-            dep
-            for dep in fact["dependencies"]
-            if dep.get("kind") != "dev" and
-               dep.get("package") not in [
-                   # Internal rustc placeholder crates.
-                   "rustc-std-workspace-alloc",
-                   "rustc-std-workspace-core",
-                   "rustc-std-workspace-std",
-               ]
-        ]
-
-        for dep in possible_deps:
-            if dep.get("default_features", True):
-                _add_to_dict(dep, "features", "default")
-
+        possible_deps = _prepare_possible_deps(fact["dependencies"])
         feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
 
-    for package in packages:
+    # Keep a resolver-only view that can include workspace members, unlike `versions_by_name`
+    # which is used for spoke/hub emission.
+    resolver_versions_by_name = {name: versions[:] for name, versions in versions_by_name.items()}
+
+    workspace_members_by_key = {(package["name"], package["version"]): package for package in workspace_members}
+    resolver_packages = packages[:]
+    for package in cargo_metadata["packages"]:
+        name = package["name"]
+        version = package["version"]
+
+        versions = resolver_versions_by_name.get(name, [])
+        if version not in versions:
+            if versions:
+                versions.append(version)
+            else:
+                resolver_versions_by_name[name] = [version]
+
+        possible_features = package.get("features", {})
+        possible_deps = _prepare_possible_deps(
+            package.get("dependencies", []),
+            converter = _cargo_metadata_dep_to_dep_dict,
+        )
+
+        package_index = len(resolver_packages)
+        lockfile_pkg = workspace_members_by_key.get((name, version), {})
+        resolver_package = {
+            "name": name,
+            "version": version,
+            "dependencies": lockfile_pkg.get("dependencies", []),
+        }
+
+        feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
+        resolver_package["feature_resolutions"] = feature_resolutions
+        feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
+
+        resolver_packages.append(resolver_package)
+
+    for package in resolver_packages:
         name = package["name"]
         deps_by_name = {}
         for maybe_fq_dep in package.get("dependencies", []):
@@ -439,24 +517,25 @@ def _generate_hub_and_spokes(
             if not dep_package:
                 dep_package = dep["name"]
 
-            versions = versions_by_name.get(dep_package)
+            versions = resolver_versions_by_name.get(dep_package)
             if not versions:
                 continue
+            constrained_versions = deps_by_name.get(dep_package)
+            if constrained_versions:
+                versions = constrained_versions
+
             if len(versions) == 1:
                 resolved_version = versions[0]
             else:
-                versions = deps_by_name.get(dep_package)
-                if not versions:
+                req = dep.get("req")
+                if not req:
                     continue
-                if len(versions) == 1:
-                    # TODO(zbarsky): validate?
-                    resolved_version = versions[0]
-                else:
-                    resolved_version = select_matching_version(dep["req"], versions)
-                    if not resolved_version:
-                        if not dep.get("optional"):
-                            print("WARNING: %s: could not resolve %s %s among %s" % (name, dep_package, dep["req"], versions))
-                        continue
+
+                resolved_version = select_matching_version(req, versions)
+                if not resolved_version:
+                    if not dep.get("optional"):
+                        print("WARNING: %s: could not resolve %s %s among %s" % (name, dep_package, req, versions))
+                    continue
 
             dep_fq = _fq_crate(dep_package, resolved_version)
             dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
@@ -473,7 +552,7 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "set up resolutions")
 
-    workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, versions_by_name)
+    workspace_fq_deps = _compute_workspace_fq_deps(workspace_members, resolver_versions_by_name)
 
     workspace_dep_versions_by_name = {}
     workspace_dep_labels_by_triple = {triple: set() for triple in platform_triples}
@@ -495,9 +574,7 @@ def _generate_hub_and_spokes(
             dep_version = None
             if dep_fq:
                 dep_version = dep_fq[len(dep_name) + 1:]
-
-            if not source and dep_version and (dep_name, dep_version) in workspace_member_keys:
-                continue
+            is_first_party_dep = not source and dep_version and (dep_name, dep_version) in workspace_member_keys
 
             if validate_lockfile and source and source.startswith("registry+"):
                 req = dep["req"]
@@ -521,20 +598,24 @@ def _generate_hub_and_spokes(
             if not dep_fq:
                 continue
 
-            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+            if not is_first_party_dep:
+                dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
-            versions = workspace_dep_versions_by_name.get(dep_name)
-            if not versions:
-                versions = set()
-                workspace_dep_versions_by_name[dep_name] = versions
-            versions.add(dep_fq)
+            if not is_first_party_dep:
+                versions = workspace_dep_versions_by_name.get(dep_name)
+                if not versions:
+                    versions = set()
+                    workspace_dep_versions_by_name[dep_name] = versions
+                versions.add(dep_fq)
 
             target = dep.get("target")
             match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
 
             for triple in match_info.matches:
-                workspace_dep_labels_by_triple[triple].add(":" + dep_name)
+                if not is_first_party_dep:
+                    workspace_dep_labels_by_triple[triple].add(":" + dep_name)
                 feature_resolutions.features_enabled[triple].update(features)
 
     # Set initial set of features from annotations
@@ -558,7 +639,7 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "set up initial deps!")
 
-    resolve(mctx, packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
+    resolve(mctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
 
     # Validate that we aren't trying to enable any `dep:foo` features that were not even in the lockfile.
     for package in packages:

@@ -1,0 +1,13 @@
+[package]
+name = "member_bar"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+dep_leaf = { path = "../../first_party_feature_propagation.deps/dep_leaf", default-features = false }
+
+[features]
+default = ["dep_leaf/default_extra"]
+json = ["dep_leaf/with_extra"]

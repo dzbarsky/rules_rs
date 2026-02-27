@@ -1,0 +1,9 @@
+[package]
+name = "member_foo"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+member_bar = { path = "../member_bar", features = ["json"] }

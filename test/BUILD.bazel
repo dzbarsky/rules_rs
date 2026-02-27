@@ -102,6 +102,23 @@ genrule(
     """,
 )
 
+genquery(
+    name = "first_party_feature_propagation_dep_leaf_deps",
+    expression = "deps(@first_party_feature_propagation//:dep_leaf-0.1.0)",
+    scope = ["@first_party_feature_propagation//:dep_leaf-0.1.0"],
+)
+
+genrule(
+    name = "verify_first_party_feature_propagation",
+    srcs = [":first_party_feature_propagation_dep_leaf_deps"],
+    outs = ["verify_first_party_feature_propagation.txt"],
+    cmd = """
+        grep '@@rules_rs++crate+first_party_feature_propagation//:itoa-1.0.17' $(location :first_party_feature_propagation_dep_leaf_deps)
+        grep '@@rules_rs++crate+first_party_feature_propagation//:ryu-1.0.23' $(location :first_party_feature_propagation_dep_leaf_deps)
+        echo ok > $@
+    """,
+)
+
 genrule(
     name = "verify_annotation_tags",
     srcs = [
@@ -125,6 +142,7 @@ filegroup(
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":rust_binary",
         ":verify_cfg_feature_target_dep",
+        ":verify_first_party_feature_propagation",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({
         "@platforms//os:windows": [],

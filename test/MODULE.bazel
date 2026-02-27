@@ -76,6 +76,7 @@ TESTS = [
     "cfg_feature_target_dep",
     "empty_workspace",
     "feature_name_overrides_implicit_dep",
+    "first_party_feature_propagation",
     "git_crates",
     "git_crates_aliased_deps",
     "many_workspace_deps",  # Got count 45796 in 20 rounds
