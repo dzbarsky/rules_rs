@@ -11,6 +11,7 @@ load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "downloa
 load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:resolver.bzl", "resolve")
+load("//rs/private:select_utils.bzl", "compute_select")
 load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -30,6 +31,31 @@ def _platform(triple, use_experimental_platforms):
 
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}
+
+def _shared_and_per_platform(platform_items, use_experimental_platforms):
+    if not platform_items:
+        return [], {}
+
+    by_platform = {}
+    for triple, items in platform_items.items():
+        platform = _platform(triple, use_experimental_platforms)
+        existing = by_platform.get(platform)
+        if existing == None:
+            by_platform[platform] = set(items)
+        else:
+            existing.update(items)
+
+    deps, per_platform = compute_select([], by_platform)
+    return sorted(deps), per_platform
+
+def _render_string_list(items):
+    return ",\n            ".join(['"%s"' % item for item in sorted(items)])
+
+def _render_string_list_dict(items_by_key):
+    rendered = []
+    for key, items in sorted(items_by_key.items()):
+        rendered.append('"%s": [%s]' % (key, ", ".join(['"%s"' % item for item in sorted(items)])))
+    return ",\n            ".join(rendered)
 
 def _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     match_info = cfg_match_cache.get(target)
@@ -845,9 +871,19 @@ filegroup(
         ),
     )
 
+    resolved_platforms = []
+    for triple in platform_triples:
+        platform = _platform(triple, use_experimental_platforms)
+        if platform not in resolved_platforms:
+            resolved_platforms.append(platform)
+
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+_PLATFORMS = [
+    {platforms}
+]
 
 def aliases(package_name = None):
     dep_data = DEP_DATA.get(package_name or native.package_name())
@@ -869,6 +905,7 @@ def all_crate_deps(
 
     return _all_crate_deps(
         dep_data,
+        platforms = _PLATFORMS,
         normal = normal,
         normal_dev = normal_dev,
         build = build,
@@ -880,7 +917,8 @@ RESOLVED_PLATFORMS = select({{
     "//conditions:default": ["@platforms//:incompatible"],
 }})
 """.format(
-            target_compatible_with = ",\n    ".join(['"%s": []' % _platform(triple, use_experimental_platforms) for triple in platform_triples]),
+            platforms = _render_string_list(resolved_platforms),
+            target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 
@@ -939,9 +977,9 @@ RESOLVED_PLATFORMS = select({{
 
         bazel_package = paths.join(workspace_package, package_dir)
 
-        deps, conditional_deps = render_select([], deps, use_experimental_platforms)
-        build_deps, conditional_build_deps = render_select([], build_deps, use_experimental_platforms)
-        dev_deps, conditional_dev_deps = render_select([], dev_deps, use_experimental_platforms)
+        deps, deps_by_platform = _shared_and_per_platform(deps, use_experimental_platforms)
+        build_deps, build_deps_by_platform = _shared_and_per_platform(build_deps, use_experimental_platforms)
+        dev_deps, dev_deps_by_platform = _shared_and_per_platform(dev_deps, use_experimental_platforms)
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
@@ -950,13 +988,22 @@ RESOLVED_PLATFORMS = select({{
         }},
         "deps": [
             {deps}
-        ]{conditional_deps},
+        ],
+        "deps_by_platform": {{
+            {deps_by_platform}
+        }},
         "build_deps": [
             {build_deps}
-        ]{conditional_build_deps},
+        ],
+        "build_deps_by_platform": {{
+            {build_deps_by_platform}
+        }},
         "dev_deps": [
             {dev_deps}
-        ]{conditional_dev_deps},
+        ],
+        "dev_deps_by_platform": {{
+            {dev_deps_by_platform}
+        }},
         "binaries": {{
             {binaries}
         }},
@@ -966,12 +1013,12 @@ RESOLVED_PLATFORMS = select({{
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
-            deps = ",\n            ".join(['"%s"' % d for d in sorted(deps)]),
-            conditional_deps = " + " + conditional_deps if conditional_deps else "",
-            build_deps = ",\n            ".join(['"%s"' % d for d in sorted(build_deps)]),
-            conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
-            dev_deps = ",\n            ".join(['"%s"' % d for d in sorted(dev_deps)]),
-            conditional_dev_deps = " + " + conditional_dev_deps if conditional_dev_deps else "",
+            deps = _render_string_list(deps),
+            deps_by_platform = _render_string_list_dict(deps_by_platform),
+            build_deps = _render_string_list(build_deps),
+            build_deps_by_platform = _render_string_list_dict(build_deps_by_platform),
+            dev_deps = _render_string_list(dev_deps),
+            dev_deps_by_platform = _render_string_list_dict(dev_deps_by_platform),
             binaries = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(binaries.items())]),
             shared_libraries = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(shared_libraries.items())]),
         ))

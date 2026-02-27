@@ -1,6 +1,9 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":semver_test.bzl", "semver_select_tests")
+
+all_crate_deps_tests()
 
 cfg_parser_tests()
 
@@ -10,7 +13,7 @@ bzl_library(
     name = "all_crate_deps",
     srcs = ["all_crate_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [],
+    deps = [":select_utils"],
 )
 
 bzl_library(
@@ -64,7 +67,10 @@ bzl_library(
     name = "repository_utils",
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [":semver"],
+    deps = [
+        ":select_utils",
+        ":semver",
+    ],
 )
 
 bzl_library(
@@ -175,6 +181,13 @@ bzl_library(
 bzl_library(
     name = "resolver",
     srcs = ["resolver.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":cfg_parser"],
+)
+
+bzl_library(
+    name = "select_utils",
+    srcs = ["select_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 

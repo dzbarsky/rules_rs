@@ -1,4 +1,5 @@
 load(":semver.bzl", "parse_full_version")
+load(":select_utils.bzl", "compute_select")
 
 def _platform(triple, use_experimental_platforms):
     if use_experimental_platforms:
@@ -12,32 +13,8 @@ def _format_branches(branches):
         ",\n        ".join(['"%s": %s' % branch for branch in branches])
     )
 
-def _compute_select(non_platform_items, platform_items):
-    if not platform_items:
-        return non_platform_items, {}
-
-    item_values = platform_items.values()
-    common_items = set(item_values[0])
-    for values in item_values[1:]:
-        common_items.intersection_update(values)
-        if not common_items:
-            break
-
-    common_items.update(non_platform_items)
-
-    branches = {}
-
-    for triple, items in platform_items.items():
-        items = set(items)
-        items.difference_update(non_platform_items)
-        items.difference_update(common_items)
-        if items:
-            branches[triple] = sorted(items)
-
-    return common_items, branches
-
 def render_select(non_platform_items, platform_items, use_experimental_platforms):
-    common_items, branches = _compute_select(non_platform_items, platform_items)
+    common_items, branches = compute_select(non_platform_items, platform_items)
 
     if not branches:
         return common_items, ""
@@ -166,7 +143,7 @@ rust_crate(
 
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
-    crate_features, conditional_crate_features = _compute_select(
+    crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
