@@ -74,6 +74,25 @@ Make sure you set `use_experimental_platforms = True` in `crate.from_cargo(...)`
 
 ### Option B: Keep your existing `rules_rust` toolchain configuration.
 
+When using `rules_rust` toolchains with `rules_rs`, first provision `rules_rust` via the
+`rules_rs` extension, then configure toolchains from `@rules_rust`:
+
+```bzl
+rules_rust = use_extension("@rules_rs//rs/experimental:rules_rust.bzl", "rules_rust")
+use_repo(rules_rust, "rules_rust")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    versions = ["1.92.0"],
+)
+
+use_repo(rust, "rust_toolchains")
+register_toolchains("@rust_toolchains//:all")
+```
+
+In this mode, keep `use_experimental_platforms = False` (the default) in `crate.from_cargo(...)`.
+
 ## Dependency Resolution
 
 `rules_rs` uses its own `crate_universe` implementation through `crate.from_cargo`:
@@ -142,6 +161,7 @@ use_repo(rules_rust, "rules_rust")
 ```
 
 The core compilation rules (`rust_library`, `rust_binary`, `rust_test`, `rust_proc_macro`, `rust_static_library`, and `rust_dynamic_library`) can be loaded directly from `@rules_rs//rs:*.bzl` but clippy integration, protobuf, etc come from rules_rust for now.
+If you import `rules_rust` via this extension, existing `load("@rules_rust//...")` statements can be kept as-is during migration.
 Using this extension is STRONGLY ENCOURAGED because it carries fixes that improve Windows behavior, rust-analyzer integration, and related compatibility work.
 In addition, when using the `rules_rs` toolchains, loading the compilation rules from `@rules_rs` directly and using the extension is REQUIRED for toolchain resolution to work correctly, at least until https://github.com/bazelbuild/rules_rust/pull/3857 is accepted by rules_rust maintainers. See the Migration section for more info.
 
@@ -198,6 +218,8 @@ platform(
 
 ## Migration
 
+If you import `rules_rust` via the extension above, you can keep existing `@rules_rust` loads unchanged.
+For long-term hygiene, it is still recommended to migrate loads to `@rules_rs//rs:*` wrappers at some point.
 A sample migration script is provided at `scripts/rewrite_rules_rust_loads.sh`. It rewrites common `@rules_rust` Rust loads to `@rules_rs//rs:*` wrappers and then formats with `buildifier`.
 
 ```bash
