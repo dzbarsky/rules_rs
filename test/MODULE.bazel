@@ -45,6 +45,12 @@ single_version_override(
     patches = ["//:libffi-aarch64-trampoline.patch"],
 )
 
+single_version_override(
+    module_name = "rules_swift",
+    patch_strip = 1,
+    patches = ["//:0001-allow-disabling-autoconfiguration.patch"],
+)
+
 bazel_dep(name = "rules_rs", version = "0.0.0")
 local_path_override(
     module_name = "rules_rs",
@@ -273,8 +279,6 @@ inject_repo(crate, "mimalloc")
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
-include("//:3rd_party/windows_x86_64_gnullvm/include.MODULE.bazel")
-include("//:3rd_party/windows_aarch64_gnullvm/include.MODULE.bazel")
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz
