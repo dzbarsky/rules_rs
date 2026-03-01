@@ -32,6 +32,9 @@ def _platform(triple, use_experimental_platforms):
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}
 
+def _exclude_deps_from_features(features):
+    return [f for f in features if not f.startswith("dep:")]
+
 def _shared_and_per_platform(platform_items, use_experimental_platforms):
     if not platform_items:
         return [], {}
@@ -930,6 +933,7 @@ RESOLVED_PLATFORMS = select({{
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
         aliases = {}
+        crate_features = {triple: set() for triple in platform_triples}
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
         dev_deps = {triple: set() for triple in platform_triples}
@@ -975,8 +979,14 @@ RESOLVED_PLATFORMS = select({{
             for triple in match:
                 target_deps[triple].add(bazel_target)
 
+        feature_resolutions = feature_resolutions_by_fq_crate.get(_fq_crate(package["name"], package["version"]))
+        if feature_resolutions:
+            for triple in platform_triples:
+                crate_features[triple].update(_exclude_deps_from_features(feature_resolutions.features_enabled[triple]))
+
         bazel_package = paths.join(workspace_package, package_dir)
 
+        crate_features, crate_features_by_platform = _shared_and_per_platform(crate_features, use_experimental_platforms)
         deps, deps_by_platform = _shared_and_per_platform(deps, use_experimental_platforms)
         build_deps, build_deps_by_platform = _shared_and_per_platform(build_deps, use_experimental_platforms)
         dev_deps, dev_deps_by_platform = _shared_and_per_platform(dev_deps, use_experimental_platforms)
@@ -985,6 +995,12 @@ RESOLVED_PLATFORMS = select({{
     {bazel_package}: {{
         "aliases": {{
             {aliases}
+        }},
+        "crate_features": [
+            {crate_features}
+        ],
+        "crate_features_by_platform": {{
+            {crate_features_by_platform}
         }},
         "deps": [
             {deps}
@@ -1013,6 +1029,8 @@ RESOLVED_PLATFORMS = select({{
     }},""".format(
             bazel_package = repr(bazel_package),
             aliases = ",\n            ".join(['"%s": "%s"' % kv for kv in sorted(aliases.items())]),
+            crate_features = _render_string_list(crate_features),
+            crate_features_by_platform = _render_string_list_dict(crate_features_by_platform),
             deps = _render_string_list(deps),
             deps_by_platform = _render_string_list_dict(deps_by_platform),
             build_deps = _render_string_list(build_deps),
