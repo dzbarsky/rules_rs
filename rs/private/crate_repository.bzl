@@ -1,7 +1,8 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
-load(":repository_utils.bzl", "generate_build_file", "common_attrs")
+load("@bazel_skylib//lib:paths.bzl", "paths")
+load(":repository_utils.bzl", "BUILD_FILE_DIR", "common_attrs", "generate_build_file", "generate_root_build_file", "materialize_crate_tree")
 load(":toml2json.bzl", "run_toml2json")
 
 def _crate_repository_impl(rctx):
@@ -25,9 +26,12 @@ def _crate_repository_impl(rctx):
 
     patch(rctx)
 
-    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+    materialize_crate_tree(rctx)
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+    cargo_toml = run_toml2json(rctx, paths.join(BUILD_FILE_DIR, "Cargo.toml"))
+
+    rctx.file(paths.join(BUILD_FILE_DIR, "BUILD.bazel"), generate_build_file(rctx, cargo_toml))
+    rctx.file("BUILD.bazel", generate_root_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 
@@ -55,9 +59,12 @@ def _local_crate_repository_impl(rctx):
 
     patch(rctx)
 
-    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+    materialize_crate_tree(rctx)
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+    cargo_toml = run_toml2json(rctx, paths.join(BUILD_FILE_DIR, "Cargo.toml"))
+
+    rctx.file(paths.join(BUILD_FILE_DIR, "BUILD.bazel"), generate_build_file(rctx, cargo_toml))
+    rctx.file("BUILD.bazel", generate_root_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 
