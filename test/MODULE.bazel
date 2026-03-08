@@ -45,6 +45,8 @@ single_version_override(
     patches = ["//:libffi-aarch64-trampoline.patch"],
 )
 
+# Fix swift toolchains...
+bazel_dep(name = "rules_swift", version = "3.5.0")
 single_version_override(
     module_name = "rules_swift",
     patch_strip = 1,
