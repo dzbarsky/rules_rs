@@ -26,6 +26,7 @@ def rust_crate(
         target_compatible_with,
         links,
         build_script,
+        build_script_target,
         build_script_data,
         build_deps,
         build_script_env,
@@ -42,20 +43,7 @@ def rust_crate(
         visibility = ["//visibility:public"],
     )
 
-    compile_data = native.glob(
-        include = ["**"],
-        exclude = [
-            "**/* *",
-            ".tmp_git_root/**/*",
-            "BUILD",
-            "BUILD.bazel",
-            "REPO.bazel",
-            "Cargo.toml.orig",
-            "WORKSPACE",
-            "WORKSPACE.bazel",
-        ],
-        allow_empty = True,
-    )
+    compile_data = ["."]
 
     srcs = native.glob(
         include = ["**/*.rs"],
@@ -71,7 +59,9 @@ def rust_crate(
     crate_tags = default_tags + tags
     build_script_target_tags = crate_tags + build_script_tags
 
-    if build_script:
+    build_script_dep = build_script_target
+
+    if not build_script_dep and build_script:
         build_script_kwargs = dict(
             deps = build_deps,
             aliases = aliases,
@@ -123,11 +113,10 @@ def rust_crate(
                 **build_script_kwargs
             )
 
-        maybe_build_script = ["_bs"]
-    else:
-        maybe_build_script = []
+        build_script_dep = "_bs"
 
-    deps = deps + maybe_build_script
+    if build_script_dep:
+        deps = deps + [build_script_dep]
 
     kwargs = dict(
         name = name,
@@ -175,4 +164,3 @@ def rust_crate(
             version = version,
             visibility = ["//visibility:public"],
         )
-

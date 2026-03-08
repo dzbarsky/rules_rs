@@ -1,0 +1,34 @@
+diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+--- a/rust/private/rustc.bzl
++++ b/rust/private/rustc.bzl
+@@ -753,6 +753,20 @@
+     """
+     linker_script = getattr(file, "linker_script", None)
+ 
++    # rules_rs-generated external crates place the complete crate tree under
++    # `__crate` and add that tree to compile_data. In that layout, adding the
++    # Rust sources again as direct action inputs is redundant.
++    source_inputs = [crate_info.srcs]
++    for compile_data_target in crate_info.compile_data_targets.to_list():
++        if compile_data_target.label.package == "__crate" or compile_data_target.label.package.endswith("/__crate"):
++            source_inputs = []
++            break
++    if source_inputs:
++        for compile_data in crate_info.compile_data.to_list():
++            if compile_data.path.endswith("/__crate") or "/__crate/" in compile_data.path:
++                source_inputs = []
++                break
++
+     # TODO: As of writing this comment Bazel used Java CcToolchainInfo.
+     # However there is ongoing work to rewrite provider in Starlark.
+     # rules_rust is not coupled with Bazel release. Remove conditional and change to
+@@ -821,8 +835,7 @@
+     nolinkstamp_compile_inputs = depset(
+         nolinkstamp_compile_direct_inputs +
+         ([] if experimental_use_cc_common_link else libs_from_linker_inputs),
+-        transitive = [
+-            crate_info.srcs,
++        transitive = source_inputs + [
+             transitive_crate_outputs,
+             # Always include hollow rlibs so they are present in the sandbox for
+             # -Ldependency= resolution. Binaries and proc-macros compile against full
