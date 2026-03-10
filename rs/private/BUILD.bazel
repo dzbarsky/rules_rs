@@ -1,11 +1,14 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":semver_test.bzl", "semver_select_tests")
 
 all_crate_deps_tests()
 
 cfg_parser_tests()
+
+lint_flags_tests()
 
 semver_select_tests()
 
