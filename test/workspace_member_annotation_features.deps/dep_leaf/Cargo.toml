@@ -1,0 +1,12 @@
+[package]
+name = "dep_leaf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+itoa = { version = "=1.0.15", optional = true }
+ryu = { version = "=1.0.20", optional = true }
+
+[features]
+default = []
+with_extra = ["dep:ryu"]

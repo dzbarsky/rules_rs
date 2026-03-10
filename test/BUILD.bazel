@@ -1,6 +1,8 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
+load("//:verify_aliases.bzl", "verify_alias")
 
 sh_test(
     name = "dummy_test",
@@ -119,6 +121,29 @@ genrule(
     """,
 )
 
+genquery(
+    name = "workspace_member_annotation_features_dep_leaf_deps",
+    expression = "deps(@workspace_member_annotation_features//:dep_leaf-0.1.0)",
+    scope = ["@workspace_member_annotation_features//:dep_leaf-0.1.0"],
+)
+
+verify_alias(
+    name = "verify_workspace_hyphen_dep_aliases",
+    aliases = workspace_hyphen_dep_aliases_aliases(package_name = "workspace_hyphen_dep_aliases/consumer"),
+    expected_alias = "dep_crate",
+    expected_label = "//workspace_hyphen_dep_aliases/dep-crate",
+)
+
+genrule(
+    name = "verify_workspace_member_annotation_features",
+    srcs = [":workspace_member_annotation_features_dep_leaf_deps"],
+    outs = ["verify_workspace_member_annotation_features.txt"],
+    cmd = """
+        grep '@@rules_rs++crate+workspace_member_annotation_features//:ryu-1.0.20' $(location :workspace_member_annotation_features_dep_leaf_deps)
+        echo ok > $@
+    """,
+)
+
 genrule(
     name = "verify_annotation_tags",
     srcs = [
@@ -143,6 +168,8 @@ filegroup(
         ":rust_binary",
         ":verify_cfg_feature_target_dep",
         ":verify_first_party_feature_propagation",
+        ":verify_workspace_hyphen_dep_aliases",
+        ":verify_workspace_member_annotation_features",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({
         "@platforms//os:windows": [],

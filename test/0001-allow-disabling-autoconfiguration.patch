@@ -1,16 +1,16 @@
 diff --git a/swift/internal/swift_autoconfiguration.bzl b/swift/internal/swift_autoconfiguration.bzl
 --- a/swift/internal/swift_autoconfiguration.bzl
 +++ b/swift/internal/swift_autoconfiguration.bzl
-@@ -40,6 +40,8 @@ load(
+@@ -38,6 +38,8 @@ load(
+     "SWIFT_FEATURE__SUPPORTS_V6",
  )
- load(":toolchain_utils.bzl", "SWIFT_TOOLCHAIN_TYPE")
  
 +SWIFT_AUTOCONFIG_DISABLE_ENV_VAR = "BAZEL_DO_NOT_DETECT_SWIFT_TOOLCHAIN"
 +
  def _scratch_file(repository_ctx, temp_dir, name, content = ""):
      """Creates and returns a scratch file with the given name and content.
  
-@@ -380,6 +382,15 @@ def _create_windows_toolchain(*, repository_ctx):
+@@ -306,6 +308,15 @@ def _create_windows_toolchain(*, repository_ctx):
      )
  
  def _swift_autoconfiguration_impl(repository_ctx):
@@ -26,7 +26,7 @@ diff --git a/swift/internal/swift_autoconfiguration.bzl b/swift/internal/swift_a
      repository_ctx.file(
          "BUILD",
          "\n".join([
-@@ -406,7 +417,7 @@ def _swift_autoconfiguration_impl(repository_ctx):
+@@ -328,7 +339,7 @@ def _swift_autoconfiguration_impl(repository_ctx):
      )
  
  swift_autoconfiguration = repository_rule(

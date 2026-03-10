@@ -650,7 +650,7 @@ def _generate_hub_and_spokes(
     # Set initial set of features from annotations
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
-            target_versions = versions_by_name.get(crate, [])
+            target_versions = resolver_versions_by_name.get(crate, [])
             if version_key != "*":
                 if version_key not in target_versions:
                     continue
@@ -963,6 +963,9 @@ RESOLVED_PLATFORMS = select({{
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
+
+            if dep.get("path"):
+                aliases[bazel_target] = dep["name"].replace("-", "_")
 
             target = dep.get("target")
             match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)

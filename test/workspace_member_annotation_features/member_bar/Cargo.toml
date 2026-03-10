@@ -1,0 +1,11 @@
+[package]
+name = "member_bar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dep_leaf = { path = "../../workspace_member_annotation_features.deps/dep_leaf", default-features = false }
+
+[features]
+default = []
+json = ["dep_leaf/with_extra"]
