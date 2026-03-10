@@ -9,6 +9,7 @@ load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_repository.bzl", "git_repository")
+load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:select_utils.bzl", "compute_select")
@@ -53,6 +54,10 @@ def _shared_and_per_platform(platform_items, use_experimental_platforms):
 
 def _render_string_list(items):
     return ",\n            ".join(['"%s"' % item for item in sorted(items)])
+
+def _render_ordered_string_list(items):
+    """Like _render_string_list but preserves insertion order."""
+    return ",\n        ".join(['"%s"' % item for item in items])
 
 def _render_string_list_dict(items_by_key):
     rendered = []
@@ -871,6 +876,29 @@ filegroup(
 )""" % (
             ",\n        ".join(['"%s"' % dep for dep in sorted(workspace_deps)]),
             " + " + conditional_workspace_deps if conditional_workspace_deps else "",
+        ),
+    )
+
+    lint_flags = cargo_toml_lint_flags(workspace_cargo_toml_json)
+    hub_contents.append(
+        """
+load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")
+
+cargo_lints(
+    name = "cargo_lints",
+    rustc_lint_flags = [
+        {rustc}
+    ],
+    clippy_lint_flags = [
+        {clippy}
+    ],
+    rustdoc_lint_flags = [
+        {rustdoc}
+    ],
+)""".format(
+            rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
+            clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
+            rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
         ),
     )
 
