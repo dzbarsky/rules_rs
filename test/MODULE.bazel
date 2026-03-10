@@ -1,5 +1,5 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "llvm", version = "0.6.0")
+bazel_dep(name = "llvm", version = "0.6.7")
 bazel_dep(name = "apple_support", version = "1.24.2", repo_name = "build_bazel_apple_support")
 
 osx = use_extension("@llvm//extensions:osx.bzl", "osx")
@@ -27,7 +27,8 @@ register_toolchains("@llvm//toolchain:all")
 
 bazel_dep(name = "rules_python", version = "1.7.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
-bazel_dep(name = "bazel_lib", version = "3.2.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "bazel_lib", version = "3.2.2")
 bazel_dep(name = "rules_cc", version = "0.2.16")
 bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
 single_version_override(
