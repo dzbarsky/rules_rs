@@ -12,6 +12,7 @@ bzl_library(
         "//rs/private:crate_repository",
         "//rs/private:downloader",
         "//rs/private:git_repository",
+        "//rs/private:lint_flags",
         "//rs/private:resolver",
         "//rs/private:select_utils",
         "//rs/private:semver",
