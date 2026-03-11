@@ -3,6 +3,7 @@ load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
+load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
 load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_dep_absent")
 
 sh_test(
@@ -135,6 +136,13 @@ verify_alias(
     expected_label = "//workspace_hyphen_dep_aliases/dep-crate",
 )
 
+verify_alias(
+    name = "verify_workspace_renamed_path_dep_aliases",
+    aliases = workspace_renamed_path_dep_aliases_aliases(package_name = "workspace_renamed_path_dep_aliases/consumer"),
+    expected_alias = "renamed_dep",
+    expected_label = "//workspace_renamed_path_dep_aliases/dep-crate",
+)
+
 genrule(
     name = "verify_workspace_member_annotation_features",
     srcs = [":workspace_member_annotation_features_dep_leaf_deps"],
@@ -184,6 +192,7 @@ filegroup(
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
         ":verify_workspace_hyphen_dep_aliases",
+        ":verify_workspace_renamed_path_dep_aliases",
         ":verify_workspace_member_annotation_features",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({

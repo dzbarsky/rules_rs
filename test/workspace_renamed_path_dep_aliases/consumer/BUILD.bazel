@@ -1,0 +1,9 @@
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load("@workspace_renamed_path_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
+
+rust_test(
+    name = "consumer_test",
+    aliases = aliases(),
+    srcs = ["src/lib.rs"],
+    deps = all_crate_deps(normal = True),
+)

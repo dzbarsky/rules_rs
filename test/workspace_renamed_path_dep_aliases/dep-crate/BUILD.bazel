@@ -1,0 +1,13 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@workspace_renamed_path_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "dep-crate",
+    srcs = ["src/lib.rs"],
+    crate_name = "dep_crate",
+    edition = "2024",
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+)

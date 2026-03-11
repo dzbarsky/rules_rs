@@ -98,6 +98,7 @@ TESTS = [
     "workspace_member_annotation_features",
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",
+    "workspace_renamed_path_dep_aliases",
     "binaries",
     "uv",
 ]

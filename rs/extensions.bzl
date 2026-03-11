@@ -993,7 +993,9 @@ RESOLVED_PLATFORMS = select({{
             if not bazel_target:
                 bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
 
-            if dep.get("path"):
+            if dep.get("rename"):
+                aliases[bazel_target] = dep["rename"].replace("-", "_")
+            elif dep.get("path"):
                 aliases[bazel_target] = dep["name"].replace("-", "_")
 
             target = dep.get("target")
