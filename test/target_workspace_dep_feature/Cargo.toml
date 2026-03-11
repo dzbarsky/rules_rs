@@ -1,0 +1,6 @@
+[workspace]
+members = ["app"]
+resolver = "3"
+
+[workspace.dependencies]
+cfg-if = { version = "=1.0.0" }

@@ -1,0 +1,12 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[features]
+force-cfg = ["dep:cfg-if"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cfg-if = { workspace = true, optional = true }

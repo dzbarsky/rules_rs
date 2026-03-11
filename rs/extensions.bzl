@@ -968,6 +968,7 @@ RESOLVED_PLATFORMS = select({{
         package_dir = _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml")
         binaries = {}
         shared_libraries = {}
+        feature_resolutions = feature_resolutions_by_fq_crate.get(_fq_crate(package["name"], package["version"]))
 
         for target in package.get("targets", []):
             kinds = target.get("kind", [])
@@ -1008,9 +1009,14 @@ RESOLVED_PLATFORMS = select({{
                 target_deps = deps
 
             for triple in match:
+                if dep.get("optional") and feature_resolutions:
+                    dep_name = dep.get("rename") or dep["name"]
+                    triple_features = feature_resolutions.features_enabled[triple]
+                    if dep_name not in triple_features and ("dep:" + dep_name) not in triple_features:
+                        continue
+
                 target_deps[triple].add(bazel_target)
 
-        feature_resolutions = feature_resolutions_by_fq_crate.get(_fq_crate(package["name"], package["version"]))
         if feature_resolutions:
             for triple in platform_triples:
                 crate_features[triple].update(_exclude_deps_from_features(feature_resolutions.features_enabled[triple]))

@@ -1,8 +1,9 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
-load("//:verify_aliases.bzl", "verify_alias")
+load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_dep_absent")
 
 sh_test(
     name = "dummy_test",
@@ -144,6 +145,18 @@ genrule(
     """,
 )
 
+verify_dep_absent(
+    name = "verify_target_workspace_dep_feature_dep_absent",
+    dep_data = target_workspace_dep_feature_dep_data["target_workspace_dep_feature/app"],
+    unexpected = "@target_workspace_dep_feature//:cfg-if-1.0.0",
+)
+
+verify_crate_feature_absent(
+    name = "verify_target_workspace_dep_feature_feature_absent",
+    dep_data = target_workspace_dep_feature_dep_data["target_workspace_dep_feature/app"],
+    unexpected = "force-cfg",
+)
+
 genrule(
     name = "verify_annotation_tags",
     srcs = [
@@ -168,6 +181,8 @@ filegroup(
         ":rust_binary",
         ":verify_cfg_feature_target_dep",
         ":verify_first_party_feature_propagation",
+        ":verify_target_workspace_dep_feature_dep_absent",
+        ":verify_target_workspace_dep_feature_feature_absent",
         ":verify_workspace_hyphen_dep_aliases",
         ":verify_workspace_member_annotation_features",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",

@@ -93,6 +93,7 @@ TESTS = [
     "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
+    "target_workspace_dep_feature",
     "vendored_crate_override",
     "workspace_member_annotation_features",
     "workspace_path_dependency",
