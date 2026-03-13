@@ -1,5 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "common_attrs", "generate_build_file")
+load("@bazel_skylib//lib:paths.bzl", "paths")
+load(":repository_utils.bzl", "BUILD_FILE_DIR", "common_attrs", "generate_build_file", "generate_root_build_file", "materialize_crate_tree")
 load(":toml2json.bzl", "run_toml2json")
 
 _INHERITABLE_FIELDS = [
@@ -46,7 +47,9 @@ def _crate_git_repository_implementation(rctx):
 
     patch(rctx)
 
-    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+    materialize_crate_tree(rctx)
+
+    cargo_toml = run_toml2json(rctx, paths.join(BUILD_FILE_DIR, "Cargo.toml"))
 
     if strip_prefix:
         workspace_cargo_toml_path = repo_dir.get_child(rctx.attr.workspace_cargo_toml)
@@ -61,7 +64,8 @@ def _crate_git_repository_implementation(rctx):
             if type(value) == "dict" and value.get("workspace") == True:
                 crate_package[field] = workspace_package.get(field)
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+    rctx.file(paths.join(BUILD_FILE_DIR, "BUILD.bazel"), generate_build_file(rctx, cargo_toml))
+    rctx.file("BUILD.bazel", generate_root_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 
